@@ -1,7 +1,10 @@
 package com.network.api.udp;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.util.function.Consumer;
 
 import com.network.config.NetworkConfigBuilder;
@@ -16,7 +19,7 @@ import com.network.serialization.Serializer;
 public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder, UdpClientConfig> {
     
     /**
-     * Sets the remote address to connect to.
+     * Sets the remote address to send datagrams to.
      * 
      * @param host the host name or IP address
      * @param port the port number
@@ -26,7 +29,7 @@ public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder,
     UdpClientBuilder withAddress(String host, int port);
     
     /**
-     * Sets the remote address to connect to.
+     * Sets the remote address to send datagrams to.
      * 
      * @param address the socket address
      * @return this builder
@@ -54,53 +57,96 @@ public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder,
     UdpClientBuilder withLocalAddress(InetSocketAddress address);
     
     /**
-     * Sets whether to enable broadcast on this socket.
+     * Sets the broadcast flag.
      * 
-     * <p>Broadcast must be enabled to use broadcast methods.
+     * <p>If enabled, the client can send broadcast datagrams to all hosts
+     * on the local network.
      * 
-     * @param enableBroadcast true to enable broadcast, false to disable
+     * @param broadcast true to enable broadcast, false to disable
      * @return this builder
      */
-    UdpClientBuilder withBroadcast(boolean enableBroadcast);
+    UdpClientBuilder withBroadcast(boolean broadcast);
     
     /**
-     * Sets whether to enable multicast on this socket.
+     * Sets the datagram size.
      * 
-     * <p>Multicast must be enabled to join multicast groups.
+     * <p>This is the maximum size of datagrams that can be received by this client.
      * 
-     * @param enableMulticast true to enable multicast, false to disable
-     * @return this builder
-     */
-    UdpClientBuilder withMulticast(boolean enableMulticast);
-    
-    /**
-     * Sets the UDP receive buffer size.
-     * 
-     * @param size the buffer size in bytes
+     * @param size the datagram size in bytes
      * @return this builder
      * @throws IllegalArgumentException if size is not positive
      */
-    UdpClientBuilder withReceiveBufferSize(int size);
+    UdpClientBuilder withDatagramSize(int size);
     
     /**
-     * Sets the UDP send buffer size.
+     * Sets the reuse address flag.
      * 
-     * @param size the buffer size in bytes
+     * <p>If enabled, the client can bind to an address that is already in use.
+     * 
+     * @param reuseAddress true to enable reuse address, false to disable
      * @return this builder
-     * @throws IllegalArgumentException if size is not positive
      */
-    UdpClientBuilder withSendBufferSize(int size);
+    UdpClientBuilder withReuseAddress(boolean reuseAddress);
     
     /**
-     * Sets the maximum datagram size.
+     * Sets the traffic class.
      * 
-     * <p>This is used for pre-allocating buffers for receiving datagrams.
+     * <p>The traffic class is used to set quality of service parameters for
+     * the outgoing datagrams.
      * 
-     * @param size the maximum datagram size in bytes
+     * @param trafficClass the traffic class
      * @return this builder
-     * @throws IllegalArgumentException if size is not positive
+     * @throws IllegalArgumentException if trafficClass is negative or greater than 255
      */
-    UdpClientBuilder withMaxDatagramSize(int size);
+    UdpClientBuilder withTrafficClass(int trafficClass);
+    
+    /**
+     * Joins a multicast group.
+     * 
+     * <p>This client will receive datagrams sent to this multicast group.
+     * 
+     * @param multicastAddress the multicast group address
+     * @return this builder
+     * @throws IllegalArgumentException if multicastAddress is null or not a multicast address
+     */
+    UdpClientBuilder joinMulticastGroup(InetAddress multicastAddress);
+    
+    /**
+     * Joins a multicast group on a specific network interface.
+     * 
+     * <p>This client will receive datagrams sent to this multicast group
+     * on the specified network interface.
+     * 
+     * @param multicastAddress the multicast group address
+     * @param networkInterface the network interface
+     * @return this builder
+     * @throws IllegalArgumentException if multicastAddress is null or not a multicast address,
+     *         or if networkInterface is null
+     */
+    UdpClientBuilder joinMulticastGroup(InetAddress multicastAddress, NetworkInterface networkInterface);
+    
+    /**
+     * Sets whether to perform loopback of multicast datagrams.
+     * 
+     * <p>If enabled, multicast datagrams sent by this client will be received
+     * by this client if it is joined to the multicast group.
+     * 
+     * @param loopbackMode true to enable loopback, false to disable
+     * @return this builder
+     */
+    UdpClientBuilder withMulticastLoopbackMode(boolean loopbackMode);
+    
+    /**
+     * Sets the multicast time-to-live.
+     * 
+     * <p>The TTL value specifies how many router hops a multicast datagram can
+     * traverse before it is discarded.
+     * 
+     * @param ttl the time-to-live value
+     * @return this builder
+     * @throws IllegalArgumentException if ttl is negative or greater than 255
+     */
+    UdpClientBuilder withMulticastTimeToLive(int ttl);
     
     /**
      * Sets whether to automatically connect when the client is built.
