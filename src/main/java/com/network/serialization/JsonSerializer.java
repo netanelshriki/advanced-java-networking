@@ -5,67 +5,59 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.network.serialization.SerializationException.SerializationOperation;
+import com.network.serialization.SerializerBuilder.FieldVisibility;
+import com.network.serialization.SerializerBuilder.NamingStrategy;
 
 /**
  * JSON implementation of the {@link Serializer} interface.
  * 
- * <p>This class uses Jackson for JSON serialization and deserialization.
+ * <p>This class uses Jackson as the underlying JSON processor.
  */
 public class JsonSerializer implements Serializer {
     
-    private static final Logger logger = LoggerFactory.getLogger(JsonSerializer.class);
-    private static final String CONTENT_TYPE = "application/json";
+    private static final String DEFAULT_CONTENT_TYPE = "application/json";
     
     private final ObjectMapper objectMapper;
     private final Charset charset;
+    private final String contentType;
     
     /**
      * Creates a new JSON serializer with default settings.
      */
     public JsonSerializer() {
-        this.objectMapper = new ObjectMapper();
-        this.charset = StandardCharsets.UTF_8;
-        
-        // Configure defaults
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-        objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        
-        // Register modules for Java 8 date/time types
-        objectMapper.findAndRegisterModules();
+        this(new Builder());
     }
     
     /**
-     * Creates a new JSON serializer with the specified object mapper and charset.
+     * Creates a new JSON serializer with the specified builder.
      * 
-     * @param objectMapper the object mapper to use
-     * @param charset the charset to use
+     * @param builder the builder containing the configuration values
      */
-    private JsonSerializer(ObjectMapper objectMapper, Charset charset) {
-        this.objectMapper = objectMapper;
-        this.charset = charset;
+    private JsonSerializer(Builder builder) {
+        this.objectMapper = createObjectMapper(builder);
+        this.charset = builder.charset;
+        this.contentType = DEFAULT_CONTENT_TYPE + "; charset=" + charset.name().toLowerCase();
     }
     
     @Override
     public String getContentType() {
-        return CONTENT_TYPE;
+        return contentType;
     }
     
     @Override
@@ -74,7 +66,7 @@ public class JsonSerializer implements Serializer {
             return objectMapper.writeValueAsBytes(object);
         } catch (JsonProcessingException e) {
             throw new SerializationException(SerializationOperation.SERIALIZE, 
-                object.getClass(), e.getMessage(), e);
+                    object != null ? object.getClass() : null, e);
         }
     }
     
@@ -84,7 +76,7 @@ public class JsonSerializer implements Serializer {
             return objectMapper.writeValueAsString(object);
         } catch (JsonProcessingException e) {
             throw new SerializationException(SerializationOperation.SERIALIZE, 
-                object.getClass(), e.getMessage(), e);
+                    object != null ? object.getClass() : null, e);
         }
     }
     
@@ -94,7 +86,7 @@ public class JsonSerializer implements Serializer {
             objectMapper.writeValue(outputStream, object);
         } catch (IOException e) {
             throw new SerializationException(SerializationOperation.SERIALIZE, 
-                object.getClass(), e.getMessage(), e);
+                    object != null ? object.getClass() : null, e);
         }
     }
     
@@ -103,8 +95,7 @@ public class JsonSerializer implements Serializer {
         try {
             return objectMapper.readValue(bytes, type);
         } catch (IOException e) {
-            throw new SerializationException(SerializationOperation.DESERIALIZE, 
-                type, e.getMessage(), e);
+            throw new SerializationException(SerializationOperation.DESERIALIZE, type, e);
         }
     }
     
@@ -112,9 +103,8 @@ public class JsonSerializer implements Serializer {
     public <T> T deserialize(String string, Class<T> type) throws SerializationException {
         try {
             return objectMapper.readValue(string, type);
-        } catch (JsonProcessingException e) {
-            throw new SerializationException(SerializationOperation.DESERIALIZE, 
-                type, e.getMessage(), e);
+        } catch (IOException e) {
+            throw new SerializationException(SerializationOperation.DESERIALIZE, type, e);
         }
     }
     
@@ -123,18 +113,21 @@ public class JsonSerializer implements Serializer {
         try {
             return objectMapper.readValue(inputStream, type);
         } catch (IOException e) {
-            throw new SerializationException(SerializationOperation.DESERIALIZE, 
-                type, e.getMessage(), e);
+            throw new SerializationException(SerializationOperation.DESERIALIZE, type, e);
         }
     }
     
+    @SuppressWarnings("unchecked")
     @Override
     public Map<String, Object> toMap(Object object) throws SerializationException {
         try {
-            return objectMapper.convertValue(object, new TypeReference<Map<String, Object>>() {});
-        } catch (IllegalArgumentException e) {
+            if (object instanceof Map) {
+                return (Map<String, Object>) object;
+            }
+            return objectMapper.convertValue(object, Map.class);
+        } catch (Exception e) {
             throw new SerializationException(SerializationOperation.TO_MAP, 
-                object.getClass(), e.getMessage(), e);
+                    object != null ? object.getClass() : null, e);
         }
     }
     
@@ -142,83 +135,122 @@ public class JsonSerializer implements Serializer {
     public <T> T fromMap(Map<String, Object> map, Class<T> type) throws SerializationException {
         try {
             return objectMapper.convertValue(map, type);
-        } catch (IllegalArgumentException e) {
-            throw new SerializationException(SerializationOperation.FROM_MAP, 
-                type, e.getMessage(), e);
+        } catch (Exception e) {
+            throw new SerializationException(SerializationOperation.FROM_MAP, type, e);
         }
     }
     
     @Override
-    public SerializerBuilder builder() {
-        return new JsonSerializerBuilder(this);
+    public Builder builder() {
+        return new Builder();
     }
     
     /**
-     * Gets the Jackson {@link ObjectMapper} used by this serializer.
+     * Creates a Jackson ObjectMapper with the specified configuration.
      * 
-     * @return the object mapper
+     * @param builder the builder containing the configuration values
+     * @return the configured ObjectMapper
      */
-    public ObjectMapper getObjectMapper() {
-        return objectMapper;
-    }
-    
-    /**
-     * Gets the charset used by this serializer.
-     * 
-     * @return the charset
-     */
-    public Charset getCharset() {
-        return charset;
+    private ObjectMapper createObjectMapper(Builder builder) {
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // Register Java 8 date/time module
+        mapper.registerModule(new JavaTimeModule());
+        
+        // Date format
+        if (builder.dateFormat != null) {
+            mapper.setDateFormat(new SimpleDateFormat(builder.dateFormat));
+        }
+        
+        // Pretty print
+        if (builder.prettyPrint) {
+            mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        }
+        
+        // Null handling
+        if (!builder.serializeNulls) {
+            mapper.setSerializationInclusion(Include.NON_NULL);
+        }
+        
+        // Naming strategy
+        if (builder.namingStrategy != null) {
+            PropertyNamingStrategy jacksonStrategy;
+            switch (builder.namingStrategy) {
+                case CAMEL_CASE:
+                    jacksonStrategy = PropertyNamingStrategies.LOWER_CAMEL_CASE;
+                    break;
+                case PASCAL_CASE:
+                    jacksonStrategy = PropertyNamingStrategies.UPPER_CAMEL_CASE;
+                    break;
+                case SNAKE_CASE:
+                    jacksonStrategy = PropertyNamingStrategies.SNAKE_CASE;
+                    break;
+                case KEBAB_CASE:
+                    jacksonStrategy = PropertyNamingStrategies.KEBAB_CASE;
+                    break;
+                case UPPER_SNAKE_CASE:
+                    jacksonStrategy = PropertyNamingStrategies.UPPER_SNAKE_CASE;
+                    break;
+                case IDENTITY:
+                default:
+                    jacksonStrategy = PropertyNamingStrategies.LOWER_CAMEL_CASE;
+                    break;
+            }
+            mapper.setPropertyNamingStrategy(jacksonStrategy);
+        }
+        
+        // Field visibility
+        if (builder.fieldVisibility != null) {
+            Visibility jacksonVisibility;
+            switch (builder.fieldVisibility) {
+                case PUBLIC:
+                    jacksonVisibility = Visibility.PUBLIC_ONLY;
+                    break;
+                case PROTECTED:
+                    jacksonVisibility = Visibility.PROTECTED_AND_PUBLIC;
+                    break;
+                case PACKAGE:
+                    jacksonVisibility = Visibility.ANY;
+                    break;
+                case PRIVATE:
+                    jacksonVisibility = Visibility.ANY;
+                    break;
+                case ANNOTATED_ONLY:
+                    jacksonVisibility = Visibility.NONE;
+                    break;
+                case NONE:
+                    jacksonVisibility = Visibility.NONE;
+                    break;
+                default:
+                    jacksonVisibility = Visibility.PUBLIC_ONLY;
+                    break;
+            }
+            mapper.setVisibility(PropertyAccessor.FIELD, jacksonVisibility);
+        }
+        
+        // Other configuration
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        
+        return mapper;
     }
     
     /**
      * Builder for {@link JsonSerializer}.
      */
-    public static class JsonSerializerBuilder implements SerializerBuilder {
+    public static class Builder implements SerializerBuilder<Builder> {
         
-        private final ObjectMapper objectMapper;
-        private Charset charset;
+        private Charset charset = StandardCharsets.UTF_8;
+        private String dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+        private boolean prettyPrint = false;
+        private boolean serializeNulls = false;
+        private boolean usePropertyName = false;
+        private NamingStrategy namingStrategy = NamingStrategy.CAMEL_CASE;
+        private FieldVisibility fieldVisibility = FieldVisibility.PUBLIC;
         private final Map<String, Object> properties = new HashMap<>();
         
-        /**
-         * Creates a new builder with default settings.
-         */
-        public JsonSerializerBuilder() {
-            this.objectMapper = new ObjectMapper();
-            this.charset = StandardCharsets.UTF_8;
-            
-            // Configure defaults
-            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-            objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-            objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-            
-            // Register modules for Java 8 date/time types
-            objectMapper.findAndRegisterModules();
-        }
-        
-        /**
-         * Creates a new builder initialized with settings from the specified serializer.
-         * 
-         * @param serializer the serializer to copy settings from
-         */
-        public JsonSerializerBuilder(JsonSerializer serializer) {
-            this.objectMapper = serializer.getObjectMapper().copy();
-            this.charset = serializer.getCharset();
-        }
-        
         @Override
-        public SerializerBuilder withPrettyPrint(boolean prettyPrint) {
-            if (prettyPrint) {
-                objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
-            } else {
-                objectMapper.disable(SerializationFeature.INDENT_OUTPUT);
-            }
-            return this;
-        }
-        
-        @Override
-        public SerializerBuilder withCharset(Charset charset) {
+        public Builder withCharset(Charset charset) {
             if (charset == null) {
                 throw new IllegalArgumentException("Charset must not be null");
             }
@@ -227,47 +259,60 @@ public class JsonSerializer implements Serializer {
         }
         
         @Override
-        public SerializerBuilder withIgnoreUnknownProperties(boolean ignoreUnknown) {
-            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, !ignoreUnknown);
-            return this;
-        }
-        
-        @Override
-        public SerializerBuilder withDateFormat(DateFormat dateFormat) {
-            if (dateFormat == null) {
-                throw new IllegalArgumentException("Date format must not be null");
+        public Builder withDateFormat(String pattern) {
+            if (pattern == null) {
+                throw new IllegalArgumentException("Date format pattern must not be null");
             }
-            objectMapper.setDateFormat(dateFormat);
-            return this;
-        }
-        
-        @Override
-        public SerializerBuilder withDateFormat(String dateFormat) {
-            if (dateFormat == null) {
-                throw new IllegalArgumentException("Date format must not be null");
+            try {
+                new SimpleDateFormat(pattern);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid date format pattern: " + pattern, e);
             }
-            objectMapper.setDateFormat(new SimpleDateFormat(dateFormat));
+            this.dateFormat = pattern;
             return this;
         }
         
         @Override
-        public SerializerBuilder withFailOnEmptyBeans(boolean failOnEmptyBeans) {
-            objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, failOnEmptyBeans);
+        public Builder withPrettyPrint(boolean prettyPrint) {
+            this.prettyPrint = prettyPrint;
             return this;
         }
         
         @Override
-        public SerializerBuilder withIncludeNulls(boolean includeNulls) {
-            if (includeNulls) {
-                objectMapper.setSerializationInclusion(JsonInclude.Include.ALWAYS);
-            } else {
-                objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        public Builder withSerializeNulls(boolean serializeNulls) {
+            this.serializeNulls = serializeNulls;
+            return this;
+        }
+        
+        @Override
+        public Builder withUsePropertyName(boolean usePropertyName) {
+            this.usePropertyName = usePropertyName;
+            if (usePropertyName) {
+                this.namingStrategy = NamingStrategy.IDENTITY;
             }
             return this;
         }
         
         @Override
-        public SerializerBuilder withProperty(String key, Object value) {
+        public Builder withNamingStrategy(NamingStrategy strategy) {
+            if (strategy == null) {
+                throw new IllegalArgumentException("Naming strategy must not be null");
+            }
+            this.namingStrategy = strategy;
+            return this;
+        }
+        
+        @Override
+        public Builder withFieldVisibility(FieldVisibility visibility) {
+            if (visibility == null) {
+                throw new IllegalArgumentException("Field visibility must not be null");
+            }
+            this.fieldVisibility = visibility;
+            return this;
+        }
+        
+        @Override
+        public Builder withProperty(String key, Object value) {
             if (key == null) {
                 throw new IllegalArgumentException("Property key must not be null");
             }
@@ -276,16 +321,7 @@ public class JsonSerializer implements Serializer {
         }
         
         @Override
-        public SerializerBuilder withProperties(Map<String, Object> properties) {
-            if (properties == null) {
-                throw new IllegalArgumentException("Properties must not be null");
-            }
-            this.properties.putAll(properties);
-            return this;
-        }
-        
-        @Override
-        public SerializerBuilder configure(Consumer<SerializerBuilder> configurer) {
+        public Builder configure(Consumer<Builder> configurer) {
             if (configurer == null) {
                 throw new IllegalArgumentException("Configurer must not be null");
             }
@@ -295,8 +331,17 @@ public class JsonSerializer implements Serializer {
         
         @Override
         public Serializer build() {
-            return new JsonSerializer(objectMapper, charset);
+            return new JsonSerializer(this);
         }
+    }
+    
+    /**
+     * Creates a new JSON serializer with default settings.
+     * 
+     * @return a new JSON serializer
+     */
+    public static JsonSerializer create() {
+        return new JsonSerializer();
     }
     
     /**
@@ -304,7 +349,7 @@ public class JsonSerializer implements Serializer {
      * 
      * @return a new builder
      */
-    public static JsonSerializerBuilder builder() {
-        return new JsonSerializerBuilder();
+    public static Builder builder() {
+        return new Builder();
     }
 }
