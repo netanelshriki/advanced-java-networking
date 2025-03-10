@@ -1,29 +1,32 @@
 package com.network.serialization;
 
 import java.nio.charset.Charset;
+import java.text.DateFormat;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * Builder for creating serializer instances.
+ * Builder for creating {@link Serializer} instances.
  * 
  * <p>This interface defines methods for configuring serialization options
- * and creating serializer instances with those configurations.
+ * and creating a serializer with those options.
  */
 public interface SerializerBuilder {
     
     /**
-     * Sets whether to pretty-print serialized output.
+     * Sets whether to pretty print the serialized output.
      * 
-     * <p>Pretty-printing adds indentation and line breaks to make
-     * the serialized output more human-readable.
+     * <p>Pretty printing formats the output with indentation and line breaks
+     * to make it more human-readable. This may increase the size of the
+     * serialized output.
      * 
-     * @param prettyPrint true to enable pretty-printing, false to disable
+     * @param prettyPrint true to pretty print, false to compact output
      * @return this builder
      */
     SerializerBuilder withPrettyPrint(boolean prettyPrint);
     
     /**
-     * Sets the charset to use for string serialization and deserialization.
+     * Sets the charset to use for string encoding and decoding.
      * 
      * @param charset the charset
      * @return this builder
@@ -32,79 +35,84 @@ public interface SerializerBuilder {
     SerializerBuilder withCharset(Charset charset);
     
     /**
-     * Sets whether to ignore unknown properties during deserialization.
+     * Sets the date format to use for serializing dates.
      * 
-     * <p>If true, unknown properties in the serialized data will be ignored
-     * when deserializing to a Java object. If false, an exception will be thrown.
-     * 
-     * @param ignoreUnknown true to ignore unknown properties, false to throw an exception
+     * @param dateFormat the date format
      * @return this builder
+     * @throws IllegalArgumentException if dateFormat is null
      */
-    SerializerBuilder withIgnoreUnknownProperties(boolean ignoreUnknown);
+    SerializerBuilder withDateFormat(DateFormat dateFormat);
     
     /**
-     * Sets whether to fail on null values during serialization.
+     * Sets the date format pattern to use for serializing dates.
      * 
-     * <p>If true, null values in Java objects will cause serialization to fail.
-     * If false, null values will be serialized normally.
-     * 
-     * @param failOnNull true to fail on null values, false to serialize them normally
+     * @param pattern the date format pattern
      * @return this builder
+     * @throws IllegalArgumentException if pattern is null
      */
-    SerializerBuilder withFailOnNull(boolean failOnNull);
-    
-    /**
-     * Sets whether to fail on empty beans during serialization.
-     * 
-     * <p>If true, attempting to serialize an empty bean (one with no properties)
-     * will cause serialization to fail. If false, empty beans will be serialized
-     * as empty objects.
-     * 
-     * @param failOnEmptyBeans true to fail on empty beans, false to serialize them normally
-     * @return this builder
-     */
-    SerializerBuilder withFailOnEmptyBeans(boolean failOnEmptyBeans);
-    
-    /**
-     * Sets whether dates should be serialized as timestamps.
-     * 
-     * <p>If true, dates will be serialized as numeric timestamps.
-     * If false, dates will be serialized in a format specified by the serializer.
-     * 
-     * @param writeDatesAsTimestamps true to write dates as timestamps, false to use a formatted representation
-     * @return this builder
-     */
-    SerializerBuilder withWriteDatesAsTimestamps(boolean writeDatesAsTimestamps);
+    SerializerBuilder withDateFormat(String pattern);
     
     /**
      * Sets whether to include null values in the serialized output.
      * 
-     * <p>If true, properties with null values will be included in the serialized output.
-     * If false, properties with null values will be omitted.
-     * 
-     * @param includeNulls true to include null values, false to omit them
+     * @param includeNulls true to include nulls, false to exclude them
      * @return this builder
      */
     SerializerBuilder withIncludeNulls(boolean includeNulls);
     
     /**
-     * Sets a custom property for the serializer.
+     * Sets whether to write dates as timestamps.
      * 
-     * <p>This method allows setting serializer-specific properties that are not
-     * covered by the other methods in this interface.
-     * 
-     * @param key the property key
-     * @param value the property value
+     * @param asTimestamp true to write dates as timestamps, false to use the date format
      * @return this builder
-     * @throws IllegalArgumentException if key is null
      */
-    SerializerBuilder withProperty(String key, Object value);
+    SerializerBuilder withWriteDatesAsTimestamp(boolean asTimestamp);
     
     /**
-     * Configures the builder using the given consumer.
+     * Sets whether field names should be case-sensitive during deserialization.
+     * 
+     * @param caseSensitive true for case-sensitive, false for case-insensitive
+     * @return this builder
+     */
+    SerializerBuilder withCaseSensitiveFields(boolean caseSensitive);
+    
+    /**
+     * Sets whether to fail on unknown properties during deserialization.
+     * 
+     * @param failOnUnknown true to fail, false to ignore unknown properties
+     * @return this builder
+     */
+    SerializerBuilder withFailOnUnknownProperties(boolean failOnUnknown);
+    
+    /**
+     * Sets the fields to include during serialization.
+     * 
+     * <p>If non-empty, only the specified fields will be included in the
+     * serialized output. All other fields will be excluded.
+     * 
+     * @param fields the fields to include
+     * @return this builder
+     * @throws IllegalArgumentException if fields is null
+     */
+    SerializerBuilder withIncludeFields(Set<String> fields);
+    
+    /**
+     * Sets the fields to exclude during serialization.
+     * 
+     * <p>If non-empty, the specified fields will be excluded from the
+     * serialized output. All other fields will be included.
+     * 
+     * @param fields the fields to exclude
+     * @return this builder
+     * @throws IllegalArgumentException if fields is null
+     */
+    SerializerBuilder withExcludeFields(Set<String> fields);
+    
+    /**
+     * Configures the builder using the specified consumer.
      * 
      * <p>This method allows for more complex configuration that may require
-     * multiple builder calls.
+     * multiple builder method calls.
      * 
      * @param configurer the configurer
      * @return this builder
@@ -115,7 +123,7 @@ public interface SerializerBuilder {
     /**
      * Builds a serializer with the configured options.
      * 
-     * @return the configured serializer
+     * @return a new serializer
      */
     Serializer build();
 }
