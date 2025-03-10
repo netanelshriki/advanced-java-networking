@@ -4,14 +4,11 @@ import com.network.exception.NetworkException;
 import com.network.exception.NetworkException.ErrorCode;
 
 /**
- * Exception thrown when serialization or deserialization fails.
+ * Exception thrown when an error occurs during serialization or deserialization.
  */
 public class SerializationException extends NetworkException {
     
     private static final long serialVersionUID = 1L;
-    
-    private final SerializationOperation operation;
-    private final Class<?> targetType;
     
     /**
      * Creates a new serialization exception with the specified message.
@@ -19,9 +16,7 @@ public class SerializationException extends NetworkException {
      * @param message the detail message
      */
     public SerializationException(String message) {
-        super(ErrorCode.PROTOCOL_ERROR, message);
-        this.operation = null;
-        this.targetType = null;
+        super(ErrorCode.PROTOCOL_ERROR, "Serialization error: " + message);
     }
     
     /**
@@ -30,9 +25,7 @@ public class SerializationException extends NetworkException {
      * @param cause the cause of this exception
      */
     public SerializationException(Throwable cause) {
-        super(ErrorCode.PROTOCOL_ERROR, cause);
-        this.operation = null;
-        this.targetType = null;
+        super(ErrorCode.PROTOCOL_ERROR, "Serialization error", cause);
     }
     
     /**
@@ -42,101 +35,43 @@ public class SerializationException extends NetworkException {
      * @param cause the cause of this exception
      */
     public SerializationException(String message, Throwable cause) {
-        super(ErrorCode.PROTOCOL_ERROR, message, cause);
-        this.operation = null;
-        this.targetType = null;
+        super(ErrorCode.PROTOCOL_ERROR, "Serialization error: " + message, cause);
     }
     
     /**
-     * Creates a new serialization exception with the specified operation and target type.
+     * Creates a new serialization exception for a specific class and operation.
      * 
-     * @param operation the serialization operation that failed
-     * @param targetType the target type of the operation
-     */
-    public SerializationException(SerializationOperation operation, Class<?> targetType) {
-        super(ErrorCode.PROTOCOL_ERROR, 
-              "Failed to " + operation.name().toLowerCase() + " " + 
-              (targetType != null ? targetType.getName() : "data"));
-        this.operation = operation;
-        this.targetType = targetType;
-    }
-    
-    /**
-     * Creates a new serialization exception with the specified operation, target type, and cause.
-     * 
-     * @param operation the serialization operation that failed
-     * @param targetType the target type of the operation
+     * @param targetClass the class being serialized or deserialized
+     * @param operation the operation being performed ("serialize" or "deserialize")
      * @param cause the cause of this exception
      */
-    public SerializationException(SerializationOperation operation, Class<?> targetType, Throwable cause) {
+    public SerializationException(Class<?> targetClass, String operation, Throwable cause) {
         super(ErrorCode.PROTOCOL_ERROR, 
-              "Failed to " + operation.name().toLowerCase() + " " + 
-              (targetType != null ? targetType.getName() : "data"), 
-              cause);
-        this.operation = operation;
-        this.targetType = targetType;
+            "Failed to " + operation + " class " + targetClass.getName(), cause);
     }
     
     /**
-     * Creates a new serialization exception with the specified operation, target type, and message.
+     * Creates a new serialization exception for a specific class, operation, and reason.
      * 
-     * @param operation the serialization operation that failed
-     * @param targetType the target type of the operation
-     * @param message the detail message
+     * @param targetClass the class being serialized or deserialized
+     * @param operation the operation being performed ("serialize" or "deserialize")
+     * @param reason the reason for the failure
      */
-    public SerializationException(SerializationOperation operation, Class<?> targetType, String message) {
-        super(ErrorCode.PROTOCOL_ERROR, message);
-        this.operation = operation;
-        this.targetType = targetType;
+    public SerializationException(Class<?> targetClass, String operation, String reason) {
+        super(ErrorCode.PROTOCOL_ERROR, 
+            "Failed to " + operation + " class " + targetClass.getName() + ": " + reason);
     }
     
     /**
-     * Creates a new serialization exception with the specified operation, target type, message, and cause.
+     * Creates a new serialization exception for a specific class, operation, reason, and cause.
      * 
-     * @param operation the serialization operation that failed
-     * @param targetType the target type of the operation
-     * @param message the detail message
+     * @param targetClass the class being serialized or deserialized
+     * @param operation the operation being performed ("serialize" or "deserialize")
+     * @param reason the reason for the failure
      * @param cause the cause of this exception
      */
-    public SerializationException(SerializationOperation operation, Class<?> targetType, 
-                                 String message, Throwable cause) {
-        super(ErrorCode.PROTOCOL_ERROR, message, cause);
-        this.operation = operation;
-        this.targetType = targetType;
-    }
-    
-    /**
-     * Gets the serialization operation that failed.
-     * 
-     * @return the operation, or null if not available
-     */
-    public SerializationOperation getOperation() {
-        return operation;
-    }
-    
-    /**
-     * Gets the target type of the serialization operation.
-     * 
-     * @return the target type, or null if not available
-     */
-    public Class<?> getTargetType() {
-        return targetType;
-    }
-    
-    /**
-     * Enum representing serialization operations.
-     */
-    public enum SerializationOperation {
-        /** Serializing an object to a format. */
-        SERIALIZE,
-        
-        /** Deserializing a format to an object. */
-        DESERIALIZE,
-        
-        /** Converting an object to a map. */
-        TO_MAP,
-        
-        /** Converting a map to an object. */
-        FROM_MAP
+    public SerializationException(Class<?> targetClass, String operation, String reason, Throwable cause) {
+        super(ErrorCode.PROTOCOL_ERROR, 
+            "Failed to " + operation + " class " + targetClass.getName() + ": " + reason, cause);
     }
 }
