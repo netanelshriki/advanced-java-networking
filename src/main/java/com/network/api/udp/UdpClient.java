@@ -3,14 +3,13 @@ package com.network.api.udp;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 import com.network.api.NetworkClient;
 import com.network.api.connection.Connection;
 import com.network.exception.NetworkException;
 
 /**
- * Client for UDP socket connections.
+ * Client for UDP datagram communication.
  * 
  * <p>This interface defines the operations for a UDP client that can send
  * and receive datagrams, and register event listeners.
@@ -18,7 +17,7 @@ import com.network.exception.NetworkException;
 public interface UdpClient extends NetworkClient {
 
     /**
-     * Gets the remote address this client is connected or will connect to.
+     * Gets the remote address this client is sending to.
      * 
      * @return the remote address
      */
@@ -66,45 +65,27 @@ public interface UdpClient extends NetworkClient {
     CompletableFuture<Void> sendToAsync(byte[] data, InetSocketAddress address);
     
     /**
-     * Broadcasts a datagram to all devices on the network.
+     * Sends a datagram and waits for a reply.
      * 
-     * <p>This requires broadcast permission and will send to the broadcast
-     * address on the specified port.
-     * 
-     * @param data the data to send
-     * @param port the port to send to
-     * @throws NetworkException if an error occurs
-     */
-    void broadcast(byte[] data, int port) throws NetworkException;
-    
-    /**
-     * Broadcasts a datagram to all devices on the network asynchronously.
-     * 
-     * <p>This requires broadcast permission and will send to the broadcast
-     * address on the specified port.
+     * <p>This method sends a datagram to the remote address and waits for a
+     * reply datagram, with a timeout.
      * 
      * @param data the data to send
-     * @param port the port to send to
-     * @return a CompletableFuture that completes when the data has been sent
+     * @return the reply data
+     * @throws NetworkException if an error occurs or if the timeout is reached
      */
-    CompletableFuture<Void> broadcastAsync(byte[] data, int port);
+    byte[] sendAndReceive(byte[] data) throws NetworkException;
     
     /**
-     * Receives a datagram.
+     * Sends a datagram and waits for a reply asynchronously.
      * 
-     * <p>This method blocks until a datagram is received or a timeout occurs.
+     * <p>This method sends a datagram to the remote address and waits for a
+     * reply datagram, with a timeout.
      * 
-     * @return the received datagram
-     * @throws NetworkException if an error occurs or a timeout occurs
+     * @param data the data to send
+     * @return a CompletableFuture that completes with the reply data
      */
-    UdpDatagram receive() throws NetworkException;
-    
-    /**
-     * Receives a datagram asynchronously.
-     * 
-     * @return a CompletableFuture that completes with the received datagram
-     */
-    CompletableFuture<UdpDatagram> receiveAsync();
+    CompletableFuture<byte[]> sendAndReceiveAsync(byte[] data);
     
     /**
      * Registers a callback for when a datagram is received.
@@ -112,48 +93,80 @@ public interface UdpClient extends NetworkClient {
      * @param callback the callback to execute when a datagram is received
      * @return this client instance for method chaining
      */
-    UdpClient onDatagramReceived(Consumer<UdpDatagram> callback);
+    UdpClient onDatagramReceived(BiConsumer<Connection, byte[]> callback);
     
     /**
-     * Registers a callback for when data is received.
+     * Sets the broadcast flag.
      * 
-     * <p>This is similar to {@link #onDatagramReceived(Consumer)}, but provides
-     * only the data and not the datagram wrapper.
+     * <p>If enabled, the client can send broadcast datagrams to all hosts
+     * on the local network.
      * 
-     * @param callback the callback to execute when data is received
-     * @return this client instance for method chaining
-     */
-    UdpClient onDataReceived(BiConsumer<Connection, byte[]> callback);
-    
-    /**
-     * Sets whether to enable broadcast on this socket.
-     * 
-     * <p>Broadcast must be enabled to use the {@link #broadcast(byte[], int)}
-     * method.
-     * 
-     * @param enableBroadcast true to enable broadcast, false to disable
+     * @param broadcast true to enable broadcast, false to disable
      * @return this client instance for method chaining
      * @throws IllegalStateException if the client is already connected
      */
-    UdpClient withBroadcast(boolean enableBroadcast);
+    UdpClient withBroadcast(boolean broadcast);
     
     /**
-     * Sets the UDP receive buffer size.
+     * Sets the datagram size.
      * 
-     * @param size the buffer size in bytes
+     * <p>This is the maximum size of datagrams that can be received by this client.
+     * 
+     * @param size the datagram size in bytes
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if size is not positive
+     * @throws IllegalStateException if the client is already connected
+     */
+    UdpClient withDatagramSize(int size);
+    
+    /**
+     * Sets the reuse address flag.
+     * 
+     * <p>If enabled, the client can bind to an address that is already in use.
+     * 
+     * @param reuseAddress true to enable reuse address, false to disable
      * @return this client instance for method chaining
      * @throws IllegalStateException if the client is already connected
      */
-    UdpClient withReceiveBufferSize(int size);
+    UdpClient withReuseAddress(boolean reuseAddress);
     
     /**
-     * Sets the UDP send buffer size.
+     * Sets the traffic class.
      * 
-     * @param size the buffer size in bytes
+     * <p>The traffic class is used to set quality of service parameters for
+     * the outgoing datagrams.
+     * 
+     * @param trafficClass the traffic class
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if trafficClass is negative or greater than 255
+     * @throws IllegalStateException if the client is already connected
+     */
+    UdpClient withTrafficClass(int trafficClass);
+    
+    /**
+     * Sets whether to perform loopback of multicast datagrams.
+     * 
+     * <p>If enabled, multicast datagrams sent by this client will be received
+     * by this client if it is joined to the multicast group.
+     * 
+     * @param loopbackMode true to enable loopback, false to disable
      * @return this client instance for method chaining
      * @throws IllegalStateException if the client is already connected
      */
-    UdpClient withSendBufferSize(int size);
+    UdpClient withMulticastLoopbackMode(boolean loopbackMode);
+    
+    /**
+     * Sets the multicast time-to-live.
+     * 
+     * <p>The TTL value specifies how many router hops a multicast datagram can
+     * traverse before it is discarded.
+     * 
+     * @param ttl the time-to-live value
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if ttl is negative or greater than 255
+     * @throws IllegalStateException if the client is already connected
+     */
+    UdpClient withMulticastTimeToLive(int ttl);
     
     /**
      * Factory method to create a new UDP client builder.
