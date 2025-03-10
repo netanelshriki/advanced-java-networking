@@ -6,144 +6,257 @@ import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.network.serialization.SerializationException.SerializationOperation;
 
 /**
- * JSON serializer implementation using Jackson.
+ * JSON implementation of the {@link Serializer} interface using Jackson.
  * 
- * <p>This class provides serialization and deserialization between Java objects
- * and JSON format using the Jackson library.
+ * <p>This class provides methods for serializing and deserializing objects to and from JSON
+ * using the Jackson library.
  */
 public class JsonSerializer implements Serializer {
     
-    private static final String CONTENT_TYPE = "application/json";
+    private static final String DEFAULT_CONTENT_TYPE = "application/json";
     
-    private final ObjectMapper mapper;
+    private final ObjectMapper objectMapper;
     private final Charset charset;
+    private final String contentType;
+    private final Map<String, Object> properties;
     
     /**
      * Creates a new JSON serializer with default settings.
      */
     public JsonSerializer() {
-        this(configureDefaultMapper(new ObjectMapper()), StandardCharsets.UTF_8);
+        this(new Builder());
     }
     
     /**
-     * Creates a new JSON serializer with the specified object mapper and charset.
+     * Creates a new JSON serializer with the specified builder.
      * 
-     * @param mapper the object mapper to use
-     * @param charset the charset to use for string conversions
+     * @param builder the builder containing the serializer settings
      */
-    public JsonSerializer(ObjectMapper mapper, Charset charset) {
-        this.mapper = mapper;
-        this.charset = charset;
+    private JsonSerializer(Builder builder) {
+        this.objectMapper = createObjectMapper(builder);
+        this.charset = builder.charset;
+        this.contentType = DEFAULT_CONTENT_TYPE + "; charset=" + charset.name().toLowerCase();
+        this.properties = new HashMap<>(builder.properties);
     }
     
     /**
-     * Configures a Jackson ObjectMapper with default settings.
+     * Creates and configures an ObjectMapper based on the builder settings.
      * 
-     * @param mapper the mapper to configure
-     * @return the configured mapper
+     * @param builder the builder containing the serializer settings
+     * @return the configured ObjectMapper
      */
-    private static ObjectMapper configureDefaultMapper(ObjectMapper mapper) {
-        return mapper
-            .registerModule(new JavaTimeModule())
-            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-            .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
-            .setSerializationInclusion(JsonInclude.Include.NON_NULL);
+    private ObjectMapper createObjectMapper(Builder builder) {
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // Configure feature flags
+        if (builder.prettyPrint) {
+            mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        }
+        
+        if (!builder.includeNulls) {
+            mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        }
+        
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, builder.failOnUnknownProperties);
+        
+        // Configure property access
+        if (builder.useFields) {
+            mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
+            mapper.setVisibility(PropertyAccessor.GETTER, Visibility.NONE);
+            mapper.setVisibility(PropertyAccessor.SETTER, Visibility.NONE);
+        }
+        
+        // Configure property naming
+        if (builder.useSnakeCase) {
+            mapper.setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategy.SNAKE_CASE);
+        }
+        
+        // Configure date format
+        if (builder.dateFormat != null) {
+            mapper.setDateFormat(new java.text.SimpleDateFormat(builder.dateFormat));
+        }
+        
+        // Register Java 8 date/time module
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        
+        return mapper;
     }
     
     @Override
     public String getContentType() {
-        return CONTENT_TYPE + "; charset=" + charset.name().toLowerCase();
+        return contentType;
     }
     
     @Override
     public byte[] serialize(Object object) throws SerializationException {
+        if (object == null) {
+            return new byte[0];
+        }
+        
         try {
-            return mapper.writeValueAsBytes(object);
+            return objectMapper.writeValueAsBytes(object);
         } catch (JsonProcessingException e) {
-            throw new SerializationException(object.getClass(), "serialize", e);
+            throw new SerializationException(
+                SerializationOperation.SERIALIZE, 
+                object.getClass(), 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     public String serializeToString(Object object) throws SerializationException {
+        if (object == null) {
+            return "";
+        }
+        
         try {
-            return mapper.writeValueAsString(object);
+            return objectMapper.writeValueAsString(object);
         } catch (JsonProcessingException e) {
-            throw new SerializationException(object.getClass(), "serialize to string", e);
+            throw new SerializationException(
+                SerializationOperation.SERIALIZE, 
+                object.getClass(), 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     public void serialize(Object object, OutputStream outputStream) throws SerializationException {
+        if (object == null || outputStream == null) {
+            return;
+        }
+        
         try {
-            mapper.writeValue(outputStream, object);
+            objectMapper.writeValue(outputStream, object);
         } catch (IOException e) {
-            throw new SerializationException(object.getClass(), "serialize to output stream", e);
+            throw new SerializationException(
+                SerializationOperation.SERIALIZE, 
+                object.getClass(), 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     public <T> T deserialize(byte[] bytes, Class<T> type) throws SerializationException {
+        if (bytes == null || bytes.length == 0 || type == null) {
+            return null;
+        }
+        
         try {
-            return mapper.readValue(bytes, type);
+            return objectMapper.readValue(bytes, type);
         } catch (IOException e) {
-            throw new SerializationException(type, "deserialize from bytes", e);
+            throw new SerializationException(
+                SerializationOperation.DESERIALIZE, 
+                type, 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     public <T> T deserialize(String string, Class<T> type) throws SerializationException {
+        if (string == null || string.isEmpty() || type == null) {
+            return null;
+        }
+        
         try {
-            return mapper.readValue(string, type);
+            return objectMapper.readValue(string, type);
         } catch (IOException e) {
-            throw new SerializationException(type, "deserialize from string", e);
+            throw new SerializationException(
+                SerializationOperation.DESERIALIZE, 
+                type, 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     public <T> T deserialize(InputStream inputStream, Class<T> type) throws SerializationException {
-        try {
-            return mapper.readValue(inputStream, type);
-        } catch (IOException e) {
-            throw new SerializationException(type, "deserialize from input stream", e);
+        if (inputStream == null || type == null) {
+            return null;
         }
-    }
-    
-    @Override
-    public Map<String, Object> toMap(Object object) throws SerializationException {
+        
         try {
-            return mapper.convertValue(object, new TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            throw new SerializationException(object.getClass(), "convert to map", e);
+            return objectMapper.readValue(inputStream, type);
+        } catch (IOException e) {
+            throw new SerializationException(
+                SerializationOperation.DESERIALIZE, 
+                type, 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     @SuppressWarnings("unchecked")
-    public <T> T fromMap(Map<String, Object> map, Class<T> type) throws SerializationException {
+    public Map<String, Object> toMap(Object object) throws SerializationException {
+        if (object == null) {
+            return new HashMap<>();
+        }
+        
         try {
-            return mapper.convertValue(map, type);
+            if (object instanceof Map) {
+                return (Map<String, Object>) object;
+            }
+            
+            return objectMapper.convertValue(object, Map.class);
         } catch (Exception e) {
-            throw new SerializationException(type, "convert from map", e);
+            throw new SerializationException(
+                SerializationOperation.OBJECT_TO_MAP, 
+                object.getClass(), 
+                "JSON", 
+                e);
+        }
+    }
+    
+    @Override
+    public <T> T fromMap(Map<String, Object> map, Class<T> type) throws SerializationException {
+        if (map == null || type == null) {
+            return null;
+        }
+        
+        try {
+            return objectMapper.convertValue(map, type);
+        } catch (Exception e) {
+            throw new SerializationException(
+                SerializationOperation.MAP_TO_OBJECT, 
+                type, 
+                "JSON", 
+                e);
         }
     }
     
     @Override
     public SerializerBuilder builder() {
-        return new Builder(this);
+        return new Builder();
+    }
+    
+    /**
+     * Gets the ObjectMapper used by this serializer.
+     * 
+     * @return the ObjectMapper
+     */
+    public ObjectMapper getObjectMapper() {
+        return objectMapper;
     }
     
     /**
@@ -151,33 +264,26 @@ public class JsonSerializer implements Serializer {
      */
     public static class Builder implements SerializerBuilder {
         
-        private final ObjectMapper mapper;
+        private boolean prettyPrint = false;
         private Charset charset = StandardCharsets.UTF_8;
+        private boolean includeNulls = false;
+        private boolean useFields = false;
+        private boolean useSnakeCase = false;
+        private String dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+        private Set<Class<?>> registeredClasses = new HashSet<>();
+        private boolean failOnUnknownProperties = false;
+        private Map<String, Object> properties = new HashMap<>();
         
         /**
          * Creates a new builder with default settings.
          */
         public Builder() {
-            this.mapper = configureDefaultMapper(new ObjectMapper());
-        }
-        
-        /**
-         * Creates a new builder initialized with settings from the specified serializer.
-         * 
-         * @param serializer the serializer to copy settings from
-         */
-        public Builder(JsonSerializer serializer) {
-            this.mapper = serializer.mapper.copy();
-            this.charset = serializer.charset;
+            // Use default values
         }
         
         @Override
         public Builder withPrettyPrint(boolean prettyPrint) {
-            if (prettyPrint) {
-                mapper.enable(SerializationFeature.INDENT_OUTPUT);
-            } else {
-                mapper.disable(SerializationFeature.INDENT_OUTPUT);
-            }
+            this.prettyPrint = prettyPrint;
             return this;
         }
         
@@ -191,36 +297,53 @@ public class JsonSerializer implements Serializer {
         }
         
         @Override
-        public Builder withIgnoreUnknownProperties(boolean ignoreUnknown) {
-            mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, !ignoreUnknown);
-            return this;
-        }
-        
-        @Override
-        public Builder withFailOnNull(boolean failOnNull) {
-            mapper.configure(SerializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, failOnNull);
-            return this;
-        }
-        
-        @Override
-        public Builder withFailOnEmptyBeans(boolean failOnEmptyBeans) {
-            mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, failOnEmptyBeans);
-            return this;
-        }
-        
-        @Override
-        public Builder withWriteDatesAsTimestamps(boolean writeDatesAsTimestamps) {
-            mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, writeDatesAsTimestamps);
-            return this;
-        }
-        
-        @Override
         public Builder withIncludeNulls(boolean includeNulls) {
-            if (includeNulls) {
-                mapper.setSerializationInclusion(JsonInclude.Include.ALWAYS);
-            } else {
-                mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+            this.includeNulls = includeNulls;
+            return this;
+        }
+        
+        @Override
+        public Builder withUseFields(boolean useFields) {
+            this.useFields = useFields;
+            return this;
+        }
+        
+        @Override
+        public Builder withSnakeCase(boolean useSnakeCase) {
+            this.useSnakeCase = useSnakeCase;
+            return this;
+        }
+        
+        @Override
+        public Builder withDateFormat(String dateFormat) {
+            if (dateFormat == null) {
+                throw new IllegalArgumentException("Date format must not be null");
             }
+            this.dateFormat = dateFormat;
+            return this;
+        }
+        
+        @Override
+        public Builder registerClass(Class<?> clazz) {
+            if (clazz == null) {
+                throw new IllegalArgumentException("Class must not be null");
+            }
+            this.registeredClasses.add(clazz);
+            return this;
+        }
+        
+        @Override
+        public Builder registerClasses(Set<Class<?>> classes) {
+            if (classes == null) {
+                throw new IllegalArgumentException("Classes must not be null");
+            }
+            this.registeredClasses = new HashSet<>(classes);
+            return this;
+        }
+        
+        @Override
+        public Builder withFailOnUnknownProperties(boolean failOnUnknown) {
+            this.failOnUnknownProperties = failOnUnknown;
             return this;
         }
         
@@ -229,41 +352,13 @@ public class JsonSerializer implements Serializer {
             if (key == null) {
                 throw new IllegalArgumentException("Property key must not be null");
             }
-            
-            // Handle Jackson-specific properties
-            switch (key) {
-                case "ACCEPT_SINGLE_VALUE_AS_ARRAY":
-                    mapper.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, (Boolean) value);
-                    break;
-                case "UNWRAP_ROOT_VALUE":
-                    mapper.configure(DeserializationFeature.UNWRAP_ROOT_VALUE, (Boolean) value);
-                    break;
-                case "WRAP_ROOT_VALUE":
-                    mapper.configure(SerializationFeature.WRAP_ROOT_VALUE, (Boolean) value);
-                    break;
-                case "ORDER_MAP_ENTRIES_BY_KEYS":
-                    mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, (Boolean) value);
-                    break;
-                default:
-                    // Unknown property
-                    break;
-            }
-            
-            return this;
-        }
-        
-        @Override
-        public Builder configure(Consumer<SerializerBuilder> configurer) {
-            if (configurer == null) {
-                throw new IllegalArgumentException("Configurer must not be null");
-            }
-            configurer.accept(this);
+            this.properties.put(key, value);
             return this;
         }
         
         @Override
         public JsonSerializer build() {
-            return new JsonSerializer(mapper, charset);
+            return new JsonSerializer(this);
         }
     }
     
