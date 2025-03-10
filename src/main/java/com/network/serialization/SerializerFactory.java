@@ -2,152 +2,124 @@ package com.network.serialization;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
- * Factory for creating serializer instances.
+ * Factory for creating serializers by content type.
  * 
- * <p>This class provides methods for creating and retrieving serializers
- * for different formats and content types.
+ * <p>This class provides methods for registering and retrieving serializers
+ * for different content types.
  */
-public class SerializerFactory {
+public final class SerializerFactory {
     
-    private static final Map<String, Serializer> SERIALIZERS = new HashMap<>();
+    private static final Map<String, Supplier<Serializer>> serializers = new HashMap<>();
     
     static {
         // Register default serializers
-        registerSerializer("application/json", new JsonSerializer());
-        registerSerializer("json", new JsonSerializer());
+        register("application/json", JsonSerializer::create);
+        register("application/json;*", JsonSerializer::create);
+        register("text/json", JsonSerializer::create);
+        register("text/json;*", JsonSerializer::create);
     }
     
     private SerializerFactory() {
         // Prevent instantiation
+        throw new AssertionError("SerializerFactory class should not be instantiated");
     }
     
     /**
-     * Gets a serializer for the specified content type.
+     * Registers a serializer for a content type.
      * 
      * @param contentType the content type
-     * @return an Optional containing the serializer, or empty if not found
+     * @param supplier the supplier that creates serializer instances
+     * @throws IllegalArgumentException if contentType or supplier is null
      */
-    public static Optional<Serializer> getSerializer(String contentType) {
-        if (contentType == null || contentType.isEmpty()) {
-            return Optional.empty();
+    public static void register(String contentType, Supplier<Serializer> supplier) {
+        if (contentType == null) {
+            throw new IllegalArgumentException("Content type must not be null");
+        }
+        if (supplier == null) {
+            throw new IllegalArgumentException("Supplier must not be null");
         }
         
-        // Normalize content type
-        contentType = normalizeContentType(contentType);
-        
-        // Try to find an exact match
-        Serializer serializer = SERIALIZERS.get(contentType);
-        if (serializer != null) {
-            return Optional.of(serializer);
+        serializers.put(contentType.toLowerCase(), supplier);
+    }
+    
+    /**
+     * Gets a serializer for a content type.
+     * 
+     * <p>This method returns a serializer that can handle the specified content type.
+     * If no exact match is found, it tries to match the base content type without parameters.
+     * 
+     * @param contentType the content type
+     * @return the serializer, or null if no matching serializer is found
+     */
+    public static Serializer getSerializer(String contentType) {
+        if (contentType == null) {
+            return null;
         }
         
-        // Try to find a match for the base type
-        int semicolonIndex = contentType.indexOf(';');
-        if (semicolonIndex > 0) {
-            String baseType = contentType.substring(0, semicolonIndex).trim();
-            serializer = SERIALIZERS.get(baseType);
-            if (serializer != null) {
-                return Optional.of(serializer);
+        String normalizedContentType = normalizeContentType(contentType);
+        
+        // Try exact match first
+        Supplier<Serializer> supplier = serializers.get(normalizedContentType);
+        
+        // If not found, try with wildcard parameters
+        if (supplier == null && normalizedContentType.contains(";")) {
+            String baseType = normalizedContentType.split(";")[0];
+            supplier = serializers.get(baseType);
+            
+            // Try with wildcard
+            if (supplier == null) {
+                supplier = serializers.get(baseType + ";*");
             }
         }
         
-        // Try to match by prefix
-        for (Map.Entry<String, Serializer> entry : SERIALIZERS.entrySet()) {
-            if (contentType.startsWith(entry.getKey() + "+")) {
-                return Optional.of(entry.getValue());
+        // If still not found, try JSON as default for many types
+        if (supplier == null) {
+            if (normalizedContentType.contains("json") || 
+                normalizedContentType.contains("javascript")) {
+                supplier = serializers.get("application/json");
             }
         }
         
-        return Optional.empty();
+        return supplier != null ? supplier.get() : null;
     }
     
     /**
-     * Gets a serializer for the specified format.
+     * Gets the default serializer.
      * 
-     * <p>The format can be a content type or a short name like "json".
+     * <p>This method returns the JSON serializer as the default.
      * 
-     * @param format the format
-     * @return an Optional containing the serializer, or empty if not found
+     * @return the default serializer
      */
-    public static Optional<Serializer> getSerializerForFormat(String format) {
-        if (format == null || format.isEmpty()) {
-            return Optional.empty();
-        }
-        
-        // Normalize format
-        format = format.toLowerCase().trim();
-        
-        // Try to find a direct match
-        Serializer serializer = SERIALIZERS.get(format);
-        if (serializer != null) {
-            return Optional.of(serializer);
-        }
-        
-        // Try to match content type
-        return getSerializer(format);
-    }
-    
-    /**
-     * Registers a serializer for the specified content type.
-     * 
-     * @param contentType the content type
-     * @param serializer the serializer
-     */
-    public static void registerSerializer(String contentType, Serializer serializer) {
-        if (contentType == null || contentType.isEmpty()) {
-            throw new IllegalArgumentException("Content type must not be null or empty");
-        }
-        if (serializer == null) {
-            throw new IllegalArgumentException("Serializer must not be null");
-        }
-        
-        // Normalize content type
-        contentType = normalizeContentType(contentType);
-        
-        SERIALIZERS.put(contentType, serializer);
-    }
-    
-    /**
-     * Creates a new JSON serializer.
-     * 
-     * @return a new JSON serializer
-     */
-    public static JsonSerializer createJsonSerializer() {
-        return new JsonSerializer();
-    }
-    
-    /**
-     * Creates a new JSON serializer builder.
-     * 
-     * @return a new JSON serializer builder
-     */
-    public static JsonSerializer.JsonSerializerBuilder createJsonSerializerBuilder() {
-        return JsonSerializer.builder();
-    }
-    
-    /**
-     * Gets a JSON serializer.
-     * 
-     * <p>This method returns the registered JSON serializer, or creates a new one
-     * if not registered.
-     * 
-     * @return a JSON serializer
-     */
-    public static Serializer getJsonSerializer() {
-        return getSerializerForFormat("json")
-            .orElseGet(SerializerFactory::createJsonSerializer);
+    public static Serializer getDefaultSerializer() {
+        return JsonSerializer.create();
     }
     
     /**
      * Normalizes a content type string.
      * 
+     * <p>This method converts the content type to lowercase and trims whitespace.
+     * 
      * @param contentType the content type to normalize
      * @return the normalized content type
      */
     private static String normalizeContentType(String contentType) {
-        return contentType.toLowerCase().trim();
+        if (contentType == null) {
+            return "";
+        }
+        
+        String normalized = contentType.trim().toLowerCase();
+        
+        // Extract base content type and parameters
+        int paramIndex = normalized.indexOf(';');
+        if (paramIndex > 0) {
+            String baseType = normalized.substring(0, paramIndex).trim();
+            String params = normalized.substring(paramIndex).trim();
+            return baseType + params;
+        }
+        
+        return normalized;
     }
 }
