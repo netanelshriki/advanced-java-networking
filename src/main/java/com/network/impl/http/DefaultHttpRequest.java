@@ -11,40 +11,39 @@ import java.util.Optional;
 import com.network.api.http.HttpRequest;
 import com.network.api.http.HttpRequestContext;
 import com.network.serialization.Serializer;
+import com.network.serialization.SerializationException;
 
 /**
  * Default implementation of {@link HttpRequest}.
  * 
- * <p>This class represents an HTTP request with all associated data,
- * such as method, URI, headers, and body.
+ * <p>This class provides a concrete implementation of the HTTP request interface
+ * with methods for accessing request properties.
  */
 public class DefaultHttpRequest implements HttpRequest {
     
     private final HttpMethod method;
     private final URI uri;
     private final Map<String, List<String>> headers;
+    private final byte[] body;
     private final Map<String, List<String>> queryParams;
     private final Map<String, String> pathParams;
-    private final byte[] body;
-    private final String contentType;
     private final boolean followRedirects;
     private final Integer timeout;
     private final HttpRequestContext context;
     private final Serializer serializer;
     
     /**
-     * Creates a new HTTP request.
+     * Creates a new HTTP request with the specified properties.
      * 
-     * @param builder the builder with the request configuration
+     * @param builder the builder containing the request properties
      */
-    private DefaultHttpRequest(Builder builder) {
+    public DefaultHttpRequest(DefaultHttpRequestBuilder builder) {
         this.method = builder.method;
         this.uri = builder.uri;
         this.headers = Collections.unmodifiableMap(builder.headers);
+        this.body = builder.body;
         this.queryParams = Collections.unmodifiableMap(builder.queryParams);
         this.pathParams = Collections.unmodifiableMap(builder.pathParams);
-        this.body = builder.body;
-        this.contentType = builder.contentType;
         this.followRedirects = builder.followRedirects;
         this.timeout = builder.timeout;
         this.context = builder.context;
@@ -73,9 +72,13 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         // Case-insensitive header lookup
+        String normalizedName = name.toLowerCase();
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(name) && !entry.getValue().isEmpty()) {
-                return Optional.of(entry.getValue().get(0));
+            if (entry.getKey().toLowerCase().equals(normalizedName)) {
+                List<String> values = entry.getValue();
+                if (values != null && !values.isEmpty()) {
+                    return Optional.of(values.get(0));
+                }
             }
         }
         
@@ -89,9 +92,13 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         // Case-insensitive header lookup
+        String normalizedName = name.toLowerCase();
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(name)) {
-                return entry.getValue();
+            if (entry.getKey().toLowerCase().equals(normalizedName)) {
+                List<String> values = entry.getValue();
+                if (values != null) {
+                    return Collections.unmodifiableList(values);
+                }
             }
         }
         
@@ -105,7 +112,7 @@ public class DefaultHttpRequest implements HttpRequest {
     
     @Override
     public byte[] getBodyAsBytes() {
-        return body != null ? body : new byte[0];
+        return body != null ? body.clone() : new byte[0];
     }
     
     @Override
@@ -114,13 +121,28 @@ public class DefaultHttpRequest implements HttpRequest {
             return "";
         }
         
-        // Use the serializer's charset to decode the bytes
-        if (serializer != null && serializer instanceof com.network.serialization.json.JsonSerializer) {
-            return new String(body, ((com.network.serialization.json.JsonSerializer) serializer).getCharset());
+        // Determine charset from Content-Type header
+        String charset = "UTF-8";
+        Optional<String> contentType = getHeader("Content-Type");
+        if (contentType.isPresent()) {
+            String value = contentType.get();
+            int charsetIndex = value.toLowerCase().indexOf("charset=");
+            if (charsetIndex != -1) {
+                int start = charsetIndex + 8; // "charset=".length()
+                int end = value.indexOf(';', start);
+                if (end == -1) {
+                    end = value.length();
+                }
+                charset = value.substring(start, end).trim();
+            }
         }
         
-        // Default to UTF-8
-        return new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            return new String(body, charset);
+        } catch (Exception e) {
+            // Fallback to UTF-8 if charset is invalid
+            return new String(body);
+        }
     }
     
     @Override
@@ -130,19 +152,18 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         if (serializer == null) {
-            throw new IllegalStateException("No serializer configured for deserialization");
+            throw new IllegalStateException("No serializer available for deserialization");
         }
         
-        return serializer.deserialize(body, type);
+        try {
+            return serializer.deserialize(body, type);
+        } catch (SerializationException e) {
+            throw new IllegalStateException("Failed to deserialize request body", e);
+        }
     }
     
     @Override
     public Optional<String> getContentType() {
-        if (contentType != null) {
-            return Optional.of(contentType);
-        }
-        
-        // Look in headers
         return getHeader("Content-Type");
     }
     
@@ -172,7 +193,11 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         List<String> values = queryParams.get(name);
-        return values != null ? values : Collections.emptyList();
+        if (values != null) {
+            return Collections.unmodifiableList(values);
+        }
+        
+        return Collections.emptyList();
     }
     
     @Override
@@ -186,7 +211,8 @@ public class DefaultHttpRequest implements HttpRequest {
             return Optional.empty();
         }
         
-        return Optional.ofNullable(pathParams.get(name));
+        String value = pathParams.get(name);
+        return Optional.ofNullable(value);
     }
     
     @Override
@@ -205,46 +231,47 @@ public class DefaultHttpRequest implements HttpRequest {
     }
     
     /**
-     * Creates a new builder for {@link DefaultHttpRequest}.
+     * Gets the serializer associated with this request.
      * 
-     * @return a new builder
+     * @return the serializer, or null if not set
      */
-    public static Builder builder() {
-        return new Builder();
+    public Serializer getSerializer() {
+        return serializer;
+    }
+    
+    @Override
+    public String toString() {
+        return method + " " + uri;
     }
     
     /**
-     * Builder for {@link DefaultHttpRequest}.
+     * Builder for creating {@link DefaultHttpRequest} instances.
      */
     public static class Builder {
-        
         private HttpMethod method = HttpMethod.GET;
         private URI uri;
-        private final Map<String, List<String>> headers = new HashMap<>();
-        private final Map<String, List<String>> queryParams = new HashMap<>();
-        private final Map<String, String> pathParams = new HashMap<>();
+        private Map<String, List<String>> headers = new HashMap<>();
         private byte[] body;
-        private String contentType;
+        private Map<String, List<String>> queryParams = new HashMap<>();
+        private Map<String, String> pathParams = new HashMap<>();
         private boolean followRedirects = true;
         private Integer timeout;
         private HttpRequestContext context = new HttpRequestContext();
         private Serializer serializer;
         
         /**
-         * Sets the HTTP method.
+         * Sets the HTTP method for the request.
          * 
          * @param method the HTTP method
          * @return this builder
          */
         public Builder method(HttpMethod method) {
-            if (method != null) {
-                this.method = method;
-            }
+            this.method = method;
             return this;
         }
         
         /**
-         * Sets the request URI.
+         * Sets the URI for the request.
          * 
          * @param uri the URI
          * @return this builder
@@ -255,7 +282,7 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         /**
-         * Adds a header.
+         * Adds a header to the request.
          * 
          * @param name the header name
          * @param value the header value
@@ -263,80 +290,16 @@ public class DefaultHttpRequest implements HttpRequest {
          */
         public Builder header(String name, String value) {
             if (name != null) {
-                headers.computeIfAbsent(name, k -> new ArrayList<>()).add(value != null ? value : "");
+                List<String> values = headers.computeIfAbsent(name, k -> new ArrayList<>());
+                if (value != null) {
+                    values.add(value);
+                }
             }
             return this;
         }
         
         /**
-         * Adds headers.
-         * 
-         * @param headers the headers
-         * @return this builder
-         */
-        public Builder headers(Map<String, String> headers) {
-            if (headers != null) {
-                headers.forEach(this::header);
-            }
-            return this;
-        }
-        
-        /**
-         * Adds a query parameter.
-         * 
-         * @param name the parameter name
-         * @param value the parameter value
-         * @return this builder
-         */
-        public Builder queryParam(String name, String value) {
-            if (name != null) {
-                queryParams.computeIfAbsent(name, k -> new ArrayList<>()).add(value != null ? value : "");
-            }
-            return this;
-        }
-        
-        /**
-         * Adds query parameters.
-         * 
-         * @param params the parameters
-         * @return this builder
-         */
-        public Builder queryParams(Map<String, String> params) {
-            if (params != null) {
-                params.forEach(this::queryParam);
-            }
-            return this;
-        }
-        
-        /**
-         * Adds a path parameter.
-         * 
-         * @param name the parameter name
-         * @param value the parameter value
-         * @return this builder
-         */
-        public Builder pathParam(String name, String value) {
-            if (name != null) {
-                pathParams.put(name, value != null ? value : "");
-            }
-            return this;
-        }
-        
-        /**
-         * Adds path parameters.
-         * 
-         * @param params the parameters
-         * @return this builder
-         */
-        public Builder pathParams(Map<String, String> params) {
-            if (params != null) {
-                params.forEach(this::pathParam);
-            }
-            return this;
-        }
-        
-        /**
-         * Sets the request body.
+         * Sets the body of the request as bytes.
          * 
          * @param body the body
          * @return this builder
@@ -347,63 +310,32 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         /**
-         * Sets the request body as a string.
+         * Adds a query parameter to the request.
          * 
-         * @param body the body
-         * @param charset the charset to use for encoding
+         * @param name the parameter name
+         * @param value the parameter value
          * @return this builder
          */
-        public Builder body(String body, java.nio.charset.Charset charset) {
-            if (body != null) {
-                this.body = body.getBytes(charset != null ? charset : java.nio.charset.StandardCharsets.UTF_8);
-            } else {
-                this.body = null;
-            }
-            return this;
-        }
-        
-        /**
-         * Sets the request body as a string using UTF-8 encoding.
-         * 
-         * @param body the body
-         * @return this builder
-         */
-        public Builder body(String body) {
-            return body(body, java.nio.charset.StandardCharsets.UTF_8);
-        }
-        
-        /**
-         * Sets the request body as a serialized object.
-         * 
-         * @param body the body object
-         * @param serializer the serializer to use
-         * @return this builder
-         */
-        public Builder body(Object body, Serializer serializer) {
-            if (body != null && serializer != null) {
-                this.body = serializer.serialize(body);
-                
-                // Set content type if not already set
-                if (this.contentType == null) {
-                    this.contentType = serializer.getContentType();
+        public Builder queryParam(String name, String value) {
+            if (name != null) {
+                List<String> values = queryParams.computeIfAbsent(name, k -> new ArrayList<>());
+                if (value != null) {
+                    values.add(value);
                 }
-            } else {
-                this.body = null;
             }
             return this;
         }
         
         /**
-         * Sets the content type.
+         * Adds a path parameter to the request.
          * 
-         * @param contentType the content type
+         * @param name the parameter name
+         * @param value the parameter value
          * @return this builder
          */
-        public Builder contentType(String contentType) {
-            this.contentType = contentType;
-            // Also set the Content-Type header
-            if (contentType != null) {
-                header("Content-Type", contentType);
+        public Builder pathParam(String name, String value) {
+            if (name != null && value != null) {
+                pathParams.put(name, value);
             }
             return this;
         }
@@ -411,7 +343,7 @@ public class DefaultHttpRequest implements HttpRequest {
         /**
          * Sets whether to follow redirects.
          * 
-         * @param followRedirects true to follow redirects, false otherwise
+         * @param followRedirects true to follow redirects, false to not
          * @return this builder
          */
         public Builder followRedirects(boolean followRedirects) {
@@ -420,35 +352,29 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         /**
-         * Sets the request timeout.
+         * Sets the timeout for the request.
          * 
-         * @param timeoutMillis the timeout in milliseconds
+         * @param timeout the timeout in milliseconds
          * @return this builder
          */
-        public Builder timeout(int timeoutMillis) {
-            if (timeoutMillis >= 0) {
-                this.timeout = timeoutMillis;
-            } else {
-                this.timeout = null;
-            }
+        public Builder timeout(Integer timeout) {
+            this.timeout = timeout;
             return this;
         }
         
         /**
-         * Sets the request context.
+         * Sets the context for the request.
          * 
          * @param context the context
          * @return this builder
          */
         public Builder context(HttpRequestContext context) {
-            if (context != null) {
-                this.context = context;
-            }
+            this.context = context != null ? context : new HttpRequestContext();
             return this;
         }
         
         /**
-         * Sets the serializer.
+         * Sets the serializer for the request.
          * 
          * @param serializer the serializer
          * @return this builder
@@ -459,17 +385,25 @@ public class DefaultHttpRequest implements HttpRequest {
         }
         
         /**
-         * Builds the HTTP request.
+         * Builds the request.
          * 
          * @return the built request
-         * @throws IllegalStateException if the builder is not properly configured
          */
         public DefaultHttpRequest build() {
             if (uri == null) {
-                throw new IllegalStateException("URI must not be null");
+                throw new IllegalStateException("URI must be set");
             }
             
             return new DefaultHttpRequest(this);
         }
+    }
+    
+    /**
+     * Creates a new builder for {@link DefaultHttpRequest}.
+     * 
+     * @return a new builder
+     */
+    public static Builder builder() {
+        return new Builder();
     }
 }
