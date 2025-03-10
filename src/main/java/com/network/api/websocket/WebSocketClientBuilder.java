@@ -1,9 +1,12 @@
 package com.network.api.websocket;
 
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.util.Map;
 import java.util.function.Consumer;
+
+import javax.net.ssl.SSLContext;
 
 import com.network.config.NetworkConfigBuilder;
 import com.network.serialization.Serializer;
@@ -17,54 +20,47 @@ import com.network.serialization.Serializer;
 public interface WebSocketClientBuilder extends NetworkConfigBuilder<WebSocketClientBuilder, WebSocketClientConfig> {
     
     /**
-     * Sets the URL for the WebSocket connection.
+     * Sets the URI to connect to.
      * 
-     * @param url the WebSocket URL
+     * @param uri the URI
      * @return this builder
-     * @throws IllegalArgumentException if url is null
+     * @throws IllegalArgumentException if uri is null
      */
-    WebSocketClientBuilder withUrl(URL url);
+    WebSocketClientBuilder withUri(URI uri);
     
     /**
-     * Sets the URL for the WebSocket connection.
+     * Sets the URI to connect to.
      * 
-     * @param url the WebSocket URL as a string
+     * @param uri the URI as a string
      * @return this builder
-     * @throws IllegalArgumentException if url is null or not a valid URL
+     * @throws IllegalArgumentException if uri is null or not a valid URI
      */
-    WebSocketClientBuilder withUrl(String url);
+    WebSocketClientBuilder withUrl(String uri);
     
     /**
-     * Sets an HTTP header to include in the WebSocket handshake request.
+     * Sets the maximum frame size.
      * 
-     * @param name the header name
-     * @param value the header value
+     * <p>This is the maximum size of WebSocket frames that can be received by this client.
+     * 
+     * @param size the maximum frame size in bytes
      * @return this builder
-     * @throws IllegalArgumentException if name is null
+     * @throws IllegalArgumentException if size is not positive
      */
-    WebSocketClientBuilder withHeader(String name, String value);
+    WebSocketClientBuilder withMaxFrameSize(int size);
     
     /**
-     * Sets the HTTP headers to include in the WebSocket handshake request.
+     * Sets the maximum message size.
      * 
-     * @param headers the headers
+     * <p>This is the maximum size of WebSocket messages that can be received by this client.
+     * 
+     * @param size the maximum message size in bytes
      * @return this builder
-     * @throws IllegalArgumentException if headers is null
+     * @throws IllegalArgumentException if size is not positive
      */
-    WebSocketClientBuilder withHeaders(Map<String, String> headers);
+    WebSocketClientBuilder withMaxMessageSize(int size);
     
     /**
-     * Sets the WebSocket subprotocols to request.
-     * 
-     * @param subprotocols the subprotocols
-     * @return this builder
-     */
-    WebSocketClientBuilder withSubprotocols(String... subprotocols);
-    
-    /**
-     * Sets the compression enabled flag.
-     * 
-     * <p>If enabled, the client will negotiate compression with the server.
+     * Sets whether to enable message compression.
      * 
      * @param compression true to enable compression, false to disable
      * @return this builder
@@ -72,26 +68,41 @@ public interface WebSocketClientBuilder extends NetworkConfigBuilder<WebSocketCl
     WebSocketClientBuilder withCompression(boolean compression);
     
     /**
-     * Sets the maximum message size.
+     * Adds a sub-protocol to be requested during the WebSocket handshake.
      * 
-     * <p>Messages larger than this size will be rejected.
-     * 
-     * @param maxMessageSize the maximum message size in bytes
+     * @param protocol the sub-protocol to add
      * @return this builder
-     * @throws IllegalArgumentException if maxMessageSize is not positive
+     * @throws IllegalArgumentException if protocol is null or empty
      */
-    WebSocketClientBuilder withMaxMessageSize(int maxMessageSize);
+    WebSocketClientBuilder withSubProtocol(String protocol);
     
     /**
-     * Sets the maximum frame size.
+     * Adds sub-protocols to be requested during the WebSocket handshake.
      * 
-     * <p>Frames larger than this size will be rejected.
-     * 
-     * @param maxFrameSize the maximum frame size in bytes
+     * @param protocols the sub-protocols to add
      * @return this builder
-     * @throws IllegalArgumentException if maxFrameSize is not positive
+     * @throws IllegalArgumentException if protocols is null
      */
-    WebSocketClientBuilder withMaxFrameSize(int maxFrameSize);
+    WebSocketClientBuilder withSubProtocols(String... protocols);
+    
+    /**
+     * Adds a custom header to be sent during the WebSocket handshake.
+     * 
+     * @param name the header name
+     * @param value the header value
+     * @return this builder
+     * @throws IllegalArgumentException if name is null or empty
+     */
+    WebSocketClientBuilder withHeader(String name, String value);
+    
+    /**
+     * Adds custom headers to be sent during the WebSocket handshake.
+     * 
+     * @param headers the headers to add
+     * @return this builder
+     * @throws IllegalArgumentException if headers is null
+     */
+    WebSocketClientBuilder withHeaders(Map<String, String> headers);
     
     /**
      * Sets whether to automatically reconnect when the connection is lost.
@@ -100,6 +111,20 @@ public interface WebSocketClientBuilder extends NetworkConfigBuilder<WebSocketCl
      * @return this builder
      */
     WebSocketClientBuilder withAutoReconnect(boolean autoReconnect);
+    
+    /**
+     * Sets the auto-reconnect backoff strategy.
+     * 
+     * <p>The backoff strategy determines how long to wait before attempting
+     * to reconnect after a connection failure.
+     * 
+     * @param initialBackoff the initial backoff duration
+     * @param maxBackoff the maximum backoff duration
+     * @param strategy the backoff strategy
+     * @return this builder
+     * @throws IllegalArgumentException if any parameter is null or invalid
+     */
+    WebSocketClientBuilder withReconnectBackoff(Duration initialBackoff, Duration maxBackoff, RetryBackoffStrategy strategy);
     
     /**
      * Sets the maximum number of reconnect attempts.
@@ -126,9 +151,50 @@ public interface WebSocketClientBuilder extends NetworkConfigBuilder<WebSocketCl
     WebSocketClientBuilder withAutoConnect(boolean autoConnect);
     
     /**
+     * Sets the ping interval.
+     * 
+     * <p>If set to a positive duration, the client will automatically send ping
+     * messages at this interval to keep the connection alive.
+     * 
+     * @param interval the ping interval, or Duration.ZERO to disable
+     * @return this builder
+     * @throws IllegalArgumentException if interval is negative
+     */
+    WebSocketClientBuilder withPingInterval(Duration interval);
+    
+    /**
+     * Sets the pong timeout.
+     * 
+     * <p>If a pong response is not received within this timeout after sending a ping,
+     * the connection will be considered closed.
+     * 
+     * @param timeout the pong timeout
+     * @return this builder
+     * @throws IllegalArgumentException if timeout is negative
+     */
+    WebSocketClientBuilder withPongTimeout(Duration timeout);
+    
+    /**
+     * Sets whether to verify SSL certificates.
+     * 
+     * @param verify true to verify, false to not
+     * @return this builder
+     */
+    WebSocketClientBuilder withVerifySsl(boolean verify);
+    
+    /**
+     * Sets the SSL context to use for secure connections.
+     * 
+     * @param sslContext the SSL context
+     * @return this builder
+     * @throws IllegalArgumentException if sslContext is null
+     */
+    WebSocketClientBuilder withSslContext(SSLContext sslContext);
+    
+    /**
      * Sets the default serializer for data conversion.
      * 
-     * <p>The serializer is used to convert between JSON strings and objects when
+     * <p>The serializer is used to convert between bytes and objects when
      * using the serialization methods.
      * 
      * @param serializer the serializer to use
