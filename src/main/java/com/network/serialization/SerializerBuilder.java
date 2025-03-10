@@ -1,22 +1,24 @@
 package com.network.serialization;
 
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
+import java.text.DateFormat;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
  * Builder for serializers.
  * 
- * <p>This interface defines the methods for building serializers with
- * various configuration options.
+ * <p>This interface defines methods for configuring serialization options
+ * and creating serializer instances.
  */
 public interface SerializerBuilder {
     
     /**
-     * Sets whether to use pretty printing for serialized output.
+     * Sets whether to pretty print the serialized output.
      * 
-     * <p>Pretty printing adds indentation and line breaks to make the
-     * output more human-readable, at the cost of increased size.
+     * <p>Pretty printing formats the output with indentation and line breaks
+     * to make it more human-readable. This is typically only used for
+     * text-based formats like JSON and XML.
      * 
      * @param prettyPrint true to enable pretty printing, false to disable
      * @return this builder
@@ -33,57 +35,39 @@ public interface SerializerBuilder {
     SerializerBuilder withCharset(Charset charset);
     
     /**
-     * Sets the character set name to use for string encoding/decoding.
-     * 
-     * @param charsetName the charset name
-     * @return this builder
-     * @throws IllegalArgumentException if charsetName is null or invalid
-     */
-    default SerializerBuilder withCharset(String charsetName) {
-        if (charsetName == null) {
-            throw new IllegalArgumentException("Charset name must not be null");
-        }
-        return withCharset(Charset.forName(charsetName));
-    }
-    
-    /**
      * Sets whether to ignore unknown properties during deserialization.
      * 
-     * <p>If true, unknown properties in the input will be ignored.
-     * If false, encountering unknown properties will cause an error.
+     * <p>If enabled, properties in the input that don't exist in the target class
+     * will be ignored. If disabled, they will cause an error.
      * 
-     * @param ignoreUnknown true to ignore unknown properties, false to throw an error
+     * @param ignoreUnknown true to ignore unknown properties, false to error
      * @return this builder
      */
     SerializerBuilder withIgnoreUnknownProperties(boolean ignoreUnknown);
     
     /**
-     * Sets whether to use snake case (lowercase with underscores) for property names.
+     * Sets the date format to use for date serialization/deserialization.
      * 
-     * <p>If true, properties will be serialized using snake_case naming convention.
-     * If false, the default naming convention will be used (typically camelCase).
-     * 
-     * @param useSnakeCase true to use snake case, false to use the default
+     * @param dateFormat the date format
      * @return this builder
+     * @throws IllegalArgumentException if dateFormat is null
      */
-    SerializerBuilder withSnakeCase(boolean useSnakeCase);
+    SerializerBuilder withDateFormat(DateFormat dateFormat);
     
     /**
-     * Sets whether to include null values in serialized output.
+     * Sets the date format to use for date serialization/deserialization.
      * 
-     * <p>If true, properties with null values will be included in the output.
-     * If false, properties with null values will be omitted.
-     * 
-     * @param includeNulls true to include null values, false to omit them
+     * @param dateFormat the date format pattern
      * @return this builder
+     * @throws IllegalArgumentException if dateFormat is null
      */
-    SerializerBuilder withIncludeNulls(boolean includeNulls);
+    SerializerBuilder withDateFormat(String dateFormat);
     
     /**
-     * Sets whether to fail on empty beans during serialization.
+     * Sets whether to fail on empty beans.
      * 
-     * <p>If true, attempting to serialize an empty bean (a class with no properties)
-     * will throw an error. If false, empty beans will be serialized as empty objects.
+     * <p>If enabled, attempting to serialize an object with no properties
+     * will cause an error. If disabled, it will produce an empty object.
      * 
      * @param failOnEmptyBeans true to fail on empty beans, false to allow them
      * @return this builder
@@ -91,22 +75,21 @@ public interface SerializerBuilder {
     SerializerBuilder withFailOnEmptyBeans(boolean failOnEmptyBeans);
     
     /**
-     * Sets whether to include type information in serialized output.
+     * Sets whether to serialize null values.
      * 
-     * <p>If true, type information will be included in the output, which allows
-     * for more precise deserialization of polymorphic types. If false, no type
-     * information will be included.
+     * <p>If enabled, properties with null values will be included in the output.
+     * If disabled, they will be omitted.
      * 
-     * @param includeTypeInfo true to include type information, false to omit it
+     * @param includeNulls true to include null values, false to omit them
      * @return this builder
      */
-    SerializerBuilder withIncludeTypeInfo(boolean includeTypeInfo);
+    SerializerBuilder withIncludeNulls(boolean includeNulls);
     
     /**
      * Sets a custom property for the serializer.
      * 
-     * <p>This method allows setting implementation-specific properties that are
-     * not covered by the standard builder methods.
+     * <p>Custom properties can be used to configure implementation-specific
+     * features that aren't covered by the standard builder methods.
      * 
      * @param key the property key
      * @param value the property value
@@ -116,7 +99,16 @@ public interface SerializerBuilder {
     SerializerBuilder withProperty(String key, Object value);
     
     /**
-     * Configures the builder using the given consumer.
+     * Sets custom properties for the serializer.
+     * 
+     * @param properties the properties
+     * @return this builder
+     * @throws IllegalArgumentException if properties is null
+     */
+    SerializerBuilder withProperties(Map<String, Object> properties);
+    
+    /**
+     * Configures the serializer using the given consumer.
      * 
      * <p>This method allows for more complex configuration that may require
      * multiple builder calls.
@@ -134,38 +126,4 @@ public interface SerializerBuilder {
      * @throws IllegalStateException if the builder is not properly configured
      */
     Serializer build();
-    
-    /**
-     * Static factory method for creating a serializer builder for JSON.
-     * 
-     * <p>By default, the builder will use UTF-8 encoding and will not pretty-print.
-     * 
-     * @return a new JSON serializer builder
-     */
-    static SerializerBuilder json() {
-        // This will be implemented by a concrete factory class
-        throw new UnsupportedOperationException("Not yet implemented");
-    }
-    
-    /**
-     * Static factory method for creating a serializer builder for Protocol Buffers.
-     * 
-     * @return a new Protocol Buffers serializer builder
-     */
-    static SerializerBuilder protobuf() {
-        // This will be implemented by a concrete factory class
-        throw new UnsupportedOperationException("Not yet implemented");
-    }
-    
-    /**
-     * Static factory method for creating a serializer builder for XML.
-     * 
-     * <p>By default, the builder will use UTF-8 encoding and will not pretty-print.
-     * 
-     * @return a new XML serializer builder
-     */
-    static SerializerBuilder xml() {
-        // This will be implemented by a concrete factory class
-        throw new UnsupportedOperationException("Not yet implemented");
-    }
 }
