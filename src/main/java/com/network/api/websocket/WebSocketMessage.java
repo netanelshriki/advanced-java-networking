@@ -8,110 +8,35 @@ import java.util.Objects;
  * Represents a WebSocket message.
  * 
  * <p>This class encapsulates the data and metadata of a WebSocket message,
- * such as the message type, content, and timestamp.
+ * such as the message type, payload, and timestamp.
  */
 public class WebSocketMessage {
     
-    /**
-     * The type of WebSocket message.
-     */
-    public enum Type {
-        /**
-         * Text message.
-         */
-        TEXT,
-        
-        /**
-         * Binary message.
-         */
-        BINARY,
-        
-        /**
-         * Ping message.
-         */
-        PING,
-        
-        /**
-         * Pong message.
-         */
-        PONG,
-        
-        /**
-         * Close message.
-         */
-        CLOSE
-    }
-    
-    private final Type type;
-    private final byte[] data;
-    private final String text;
-    private final int closeCode;
-    private final String closeReason;
-    private final Instant timestamp;
+    private final MessageType type;
+    private final Object payload;
+    private final Instant receiveTime;
     
     /**
-     * Creates a new text message.
-     * 
-     * @param text the text content
-     */
-    public static WebSocketMessage text(String text) {
-        return new WebSocketMessage(Type.TEXT, null, text, 0, null, Instant.now());
-    }
-    
-    /**
-     * Creates a new binary message.
-     * 
-     * @param data the binary content
-     */
-    public static WebSocketMessage binary(byte[] data) {
-        return new WebSocketMessage(Type.BINARY, data, null, 0, null, Instant.now());
-    }
-    
-    /**
-     * Creates a new ping message.
-     * 
-     * @param data the ping content, or null for an empty ping
-     */
-    public static WebSocketMessage ping(byte[] data) {
-        return new WebSocketMessage(Type.PING, data, null, 0, null, Instant.now());
-    }
-    
-    /**
-     * Creates a new pong message.
-     * 
-     * @param data the pong content, or null for an empty pong
-     */
-    public static WebSocketMessage pong(byte[] data) {
-        return new WebSocketMessage(Type.PONG, data, null, 0, null, Instant.now());
-    }
-    
-    /**
-     * Creates a new close message.
-     * 
-     * @param code the close code
-     * @param reason the close reason, or null
-     */
-    public static WebSocketMessage close(int code, String reason) {
-        return new WebSocketMessage(Type.CLOSE, null, null, code, reason, Instant.now());
-    }
-    
-    /**
-     * Creates a new WebSocket message.
+     * Creates a new WebSocket message with the current time.
      * 
      * @param type the message type
-     * @param data the binary content, or null for text messages
-     * @param text the text content, or null for binary messages
-     * @param closeCode the close code, or 0 for non-close messages
-     * @param closeReason the close reason, or null for non-close messages
-     * @param timestamp the timestamp when the message was created
+     * @param payload the message payload
      */
-    private WebSocketMessage(Type type, byte[] data, String text, int closeCode, String closeReason, Instant timestamp) {
+    public WebSocketMessage(MessageType type, Object payload) {
+        this(type, payload, Instant.now());
+    }
+    
+    /**
+     * Creates a new WebSocket message with a specific receive time.
+     * 
+     * @param type the message type
+     * @param payload the message payload
+     * @param receiveTime the time the message was received
+     */
+    public WebSocketMessage(MessageType type, Object payload, Instant receiveTime) {
         this.type = type;
-        this.data = data != null ? Arrays.copyOf(data, data.length) : null;
-        this.text = text;
-        this.closeCode = closeCode;
-        this.closeReason = closeReason;
-        this.timestamp = timestamp != null ? timestamp : Instant.now();
+        this.payload = payload;
+        this.receiveTime = receiveTime != null ? receiveTime : Instant.now();
     }
     
     /**
@@ -119,110 +44,97 @@ public class WebSocketMessage {
      * 
      * @return the message type
      */
-    public Type getType() {
+    public MessageType getType() {
         return type;
     }
     
     /**
-     * Gets the binary content.
+     * Gets the message payload.
      * 
-     * <p>This method returns the binary content for binary, ping, and pong messages.
-     * For text and close messages, it returns null.
+     * <p>The payload type depends on the message type:
+     * <ul>
+     *   <li>TEXT: String</li>
+     *   <li>BINARY: byte[]</li>
+     *   <li>PING: byte[]</li>
+     *   <li>PONG: byte[]</li>
+     * </ul>
      * 
-     * @return the binary content, or null if not applicable
+     * @return the payload
      */
-    public byte[] getData() {
-        return data != null ? Arrays.copyOf(data, data.length) : null;
+    public Object getPayload() {
+        return payload;
     }
     
     /**
-     * Gets the text content.
+     * Gets the message payload as a string.
      * 
-     * <p>This method returns the text content for text messages.
-     * For binary, ping, pong, and close messages, it returns null.
-     * 
-     * @return the text content, or null if not applicable
+     * @return the payload as a string, or null if the payload is not a string
+     *         or the message type is not TEXT
      */
-    public String getText() {
-        return text;
+    public String getTextPayload() {
+        if (type == MessageType.TEXT && payload instanceof String) {
+            return (String) payload;
+        }
+        return null;
     }
     
     /**
-     * Gets the close code.
+     * Gets the message payload as bytes.
      * 
-     * <p>This method returns the close code for close messages.
-     * For other message types, it returns 0.
-     * 
-     * @return the close code, or 0 if not applicable
+     * @return the payload as bytes, or null if the payload is not bytes
+     *         or the message type is not BINARY, PING, or PONG
      */
-    public int getCloseCode() {
-        return closeCode;
+    public byte[] getBinaryPayload() {
+        if ((type == MessageType.BINARY || type == MessageType.PING || type == MessageType.PONG) 
+                && payload instanceof byte[]) {
+            return (byte[]) payload;
+        }
+        return null;
     }
     
     /**
-     * Gets the close reason.
+     * Gets the time the message was received.
      * 
-     * <p>This method returns the close reason for close messages.
-     * For other message types, it returns null.
-     * 
-     * @return the close reason, or null if not applicable
+     * @return the receive time
      */
-    public String getCloseReason() {
-        return closeReason;
+    public Instant getReceiveTime() {
+        return receiveTime;
     }
     
     /**
-     * Gets the timestamp when this message was created.
+     * Checks if this message is a text message.
      * 
-     * @return the timestamp
-     */
-    public Instant getTimestamp() {
-        return timestamp;
-    }
-    
-    /**
-     * Checks if this is a text message.
-     * 
-     * @return true if this is a text message, false otherwise
+     * @return true if the message type is TEXT, false otherwise
      */
     public boolean isText() {
-        return type == Type.TEXT;
+        return type == MessageType.TEXT;
     }
     
     /**
-     * Checks if this is a binary message.
+     * Checks if this message is a binary message.
      * 
-     * @return true if this is a binary message, false otherwise
+     * @return true if the message type is BINARY, false otherwise
      */
     public boolean isBinary() {
-        return type == Type.BINARY;
+        return type == MessageType.BINARY;
     }
     
     /**
-     * Checks if this is a ping message.
+     * Checks if this message is a ping message.
      * 
-     * @return true if this is a ping message, false otherwise
+     * @return true if the message type is PING, false otherwise
      */
     public boolean isPing() {
-        return type == Type.PING;
+        return type == MessageType.PING;
     }
     
     /**
-     * Checks if this is a pong message.
+     * Checks if this message is a pong message.
      * 
-     * @return true if this is a pong message, false otherwise
+     * @return true if the message type is PONG, false otherwise
      */
     public boolean isPong() {
-        return type == Type.PONG;
-    }
-    
-    /**
-     * Checks if this is a close message.
-     * 
-     * @return true if this is a close message, false otherwise
-     */
-    public boolean isClose() {
-        return type == Type.CLOSE;
+        return type == MessageType.PONG;
     }
     
     @Override
@@ -230,47 +142,101 @@ public class WebSocketMessage {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         WebSocketMessage that = (WebSocketMessage) o;
-        return closeCode == that.closeCode &&
-               type == that.type &&
-               Arrays.equals(data, that.data) &&
-               Objects.equals(text, that.text) &&
-               Objects.equals(closeReason, that.closeReason) &&
-               Objects.equals(timestamp, that.timestamp);
+        
+        boolean payloadEquals;
+        if (payload instanceof byte[] && that.payload instanceof byte[]) {
+            payloadEquals = Arrays.equals((byte[]) payload, (byte[]) that.payload);
+        } else {
+            payloadEquals = Objects.equals(payload, that.payload);
+        }
+        
+        return type == that.type &&
+               payloadEquals &&
+               Objects.equals(receiveTime, that.receiveTime);
     }
     
     @Override
     public int hashCode() {
-        int result = Objects.hash(type, text, closeCode, closeReason, timestamp);
-        result = 31 * result + Arrays.hashCode(data);
-        return result;
+        int payloadHash;
+        if (payload instanceof byte[]) {
+            payloadHash = Arrays.hashCode((byte[]) payload);
+        } else {
+            payloadHash = Objects.hashCode(payload);
+        }
+        
+        return Objects.hash(type, payloadHash, receiveTime);
     }
     
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("WebSocketMessage{type=").append(type);
-        
-        switch (type) {
-            case TEXT:
-                sb.append(", text='").append(text).append('\'');
-                break;
-            case BINARY:
-                sb.append(", data=").append(data != null ? data.length + " bytes" : "null");
-                break;
-            case PING:
-                sb.append(", pingData=").append(data != null ? data.length + " bytes" : "null");
-                break;
-            case PONG:
-                sb.append(", pongData=").append(data != null ? data.length + " bytes" : "null");
-                break;
-            case CLOSE:
-                sb.append(", closeCode=").append(closeCode);
-                if (closeReason != null) {
-                    sb.append(", closeReason='").append(closeReason).append('\'');
-                }
-                break;
+        String payloadStr;
+        if (payload instanceof byte[]) {
+            payloadStr = "binary[" + ((byte[]) payload).length + " bytes]";
+        } else {
+            payloadStr = String.valueOf(payload);
         }
         
-        sb.append(", timestamp=").append(timestamp).append('}');
-        return sb.toString();
+        return "WebSocketMessage{" +
+               "type=" + type +
+               ", payload=" + payloadStr +
+               ", receiveTime=" + receiveTime +
+               '}';
+    }
+    
+    /**
+     * Enum representing WebSocket message types.
+     */
+    public enum MessageType {
+        /** Text message. */
+        TEXT,
+        
+        /** Binary message. */
+        BINARY,
+        
+        /** Ping message. */
+        PING,
+        
+        /** Pong message. */
+        PONG
+    }
+    
+    /**
+     * Creates a new text message.
+     * 
+     * @param text the text payload
+     * @return a new text message
+     */
+    public static WebSocketMessage text(String text) {
+        return new WebSocketMessage(MessageType.TEXT, text);
+    }
+    
+    /**
+     * Creates a new binary message.
+     * 
+     * @param data the binary payload
+     * @return a new binary message
+     */
+    public static WebSocketMessage binary(byte[] data) {
+        return new WebSocketMessage(MessageType.BINARY, data);
+    }
+    
+    /**
+     * Creates a new ping message.
+     * 
+     * @param data the ping payload, or null for an empty ping
+     * @return a new ping message
+     */
+    public static WebSocketMessage ping(byte[] data) {
+        return new WebSocketMessage(MessageType.PING, data != null ? data : new byte[0]);
+    }
+    
+    /**
+     * Creates a new pong message.
+     * 
+     * @param data the pong payload, or null for an empty pong
+     * @return a new pong message
+     */
+    public static WebSocketMessage pong(byte[] data) {
+        return new WebSocketMessage(MessageType.PONG, data != null ? data : new byte[0]);
     }
 }
