@@ -6,31 +6,15 @@ import com.network.exception.NetworkException.ErrorCode;
 /**
  * Exception thrown when serialization or deserialization fails.
  * 
- * <p>This exception provides additional information about the serialization
- * operation that failed, such as the object type and the direction
- * (serialization or deserialization).
+ * <p>This exception is thrown by {@link Serializer} implementations when
+ * they encounter errors during serialization or deserialization.
  */
 public class SerializationException extends NetworkException {
     
     private static final long serialVersionUID = 1L;
     
-    /**
-     * Direction of the serialization operation that failed.
-     */
-    public enum Direction {
-        /**
-         * Serialization (object to bytes/string).
-         */
-        SERIALIZE,
-        
-        /**
-         * Deserialization (bytes/string to object).
-         */
-        DESERIALIZE
-    }
-    
-    private final Direction direction;
-    private final Class<?> objectType;
+    private final SerializationOperation operation;
+    private final Class<?> type;
     
     /**
      * Creates a new serialization exception with the specified message.
@@ -39,8 +23,8 @@ public class SerializationException extends NetworkException {
      */
     public SerializationException(String message) {
         super(ErrorCode.PROTOCOL_ERROR, message);
-        this.direction = null;
-        this.objectType = null;
+        this.operation = SerializationOperation.UNKNOWN;
+        this.type = null;
     }
     
     /**
@@ -50,8 +34,8 @@ public class SerializationException extends NetworkException {
      */
     public SerializationException(Throwable cause) {
         super(ErrorCode.PROTOCOL_ERROR, cause);
-        this.direction = null;
-        this.objectType = null;
+        this.operation = SerializationOperation.UNKNOWN;
+        this.type = null;
     }
     
     /**
@@ -62,108 +46,148 @@ public class SerializationException extends NetworkException {
      */
     public SerializationException(String message, Throwable cause) {
         super(ErrorCode.PROTOCOL_ERROR, message, cause);
-        this.direction = null;
-        this.objectType = null;
+        this.operation = SerializationOperation.UNKNOWN;
+        this.type = null;
     }
     
     /**
-     * Creates a new serialization exception with the specified direction and object type.
+     * Creates a new serialization exception with the specified operation and type.
      * 
-     * @param direction the direction of the serialization operation
-     * @param objectType the type of object being serialized or deserialized
+     * @param operation the serialization operation that failed
+     * @param type the class involved in the operation
      */
-    public SerializationException(Direction direction, Class<?> objectType) {
-        super(ErrorCode.PROTOCOL_ERROR, buildMessage(direction, objectType, null));
-        this.direction = direction;
-        this.objectType = objectType;
+    public SerializationException(SerializationOperation operation, Class<?> type) {
+        super(ErrorCode.PROTOCOL_ERROR, buildMessage(operation, type, null));
+        this.operation = operation;
+        this.type = type;
     }
     
     /**
-     * Creates a new serialization exception with the specified direction, object type, and cause.
+     * Creates a new serialization exception with the specified operation, type, and cause.
      * 
-     * @param direction the direction of the serialization operation
-     * @param objectType the type of object being serialized or deserialized
+     * @param operation the serialization operation that failed
+     * @param type the class involved in the operation
      * @param cause the cause of this exception
      */
-    public SerializationException(Direction direction, Class<?> objectType, Throwable cause) {
-        super(ErrorCode.PROTOCOL_ERROR, buildMessage(direction, objectType, null), cause);
-        this.direction = direction;
-        this.objectType = objectType;
+    public SerializationException(SerializationOperation operation, Class<?> type, Throwable cause) {
+        super(ErrorCode.PROTOCOL_ERROR, buildMessage(operation, type, null), cause);
+        this.operation = operation;
+        this.type = type;
     }
     
     /**
-     * Creates a new serialization exception with the specified direction, object type, and message.
+     * Creates a new serialization exception with the specified operation, type, and custom message.
      * 
-     * @param direction the direction of the serialization operation
-     * @param objectType the type of object being serialized or deserialized
+     * @param operation the serialization operation that failed
+     * @param type the class involved in the operation
      * @param message the detail message
      */
-    public SerializationException(Direction direction, Class<?> objectType, String message) {
-        super(ErrorCode.PROTOCOL_ERROR, buildMessage(direction, objectType, message));
-        this.direction = direction;
-        this.objectType = objectType;
+    public SerializationException(SerializationOperation operation, Class<?> type, String message) {
+        super(ErrorCode.PROTOCOL_ERROR, buildMessage(operation, type, message));
+        this.operation = operation;
+        this.type = type;
     }
     
     /**
-     * Creates a new serialization exception with the specified direction, object type, message, and cause.
+     * Creates a new serialization exception with the specified operation, type, custom message, and cause.
      * 
-     * @param direction the direction of the serialization operation
-     * @param objectType the type of object being serialized or deserialized
+     * @param operation the serialization operation that failed
+     * @param type the class involved in the operation
      * @param message the detail message
      * @param cause the cause of this exception
      */
-    public SerializationException(Direction direction, Class<?> objectType, String message, Throwable cause) {
-        super(ErrorCode.PROTOCOL_ERROR, buildMessage(direction, objectType, message), cause);
-        this.direction = direction;
-        this.objectType = objectType;
+    public SerializationException(SerializationOperation operation, Class<?> type, String message, Throwable cause) {
+        super(ErrorCode.PROTOCOL_ERROR, buildMessage(operation, type, message), cause);
+        this.operation = operation;
+        this.type = type;
     }
     
     /**
-     * Gets the direction of the serialization operation that failed.
+     * Gets the serialization operation that failed.
      * 
-     * @return the direction, or null if not available
+     * @return the operation
      */
-    public Direction getDirection() {
-        return direction;
+    public SerializationOperation getOperation() {
+        return operation;
     }
     
     /**
-     * Gets the type of object being serialized or deserialized.
+     * Gets the class involved in the operation.
      * 
-     * @return the object type, or null if not available
+     * @return the class, or null if not available
      */
-    public Class<?> getObjectType() {
-        return objectType;
+    public Class<?> getType() {
+        return type;
     }
     
     /**
-     * Builds a standard error message from the direction, object type, and message.
+     * Builds a standard error message for serialization exceptions.
      * 
-     * @param direction the direction of the serialization operation
-     * @param objectType the type of object being serialized or deserialized
-     * @param message the detail message
-     * @return the built message
+     * @param operation the serialization operation
+     * @param type the class involved in the operation
+     * @param customMessage a custom message, or null to use the default
+     * @return the error message
      */
-    private static String buildMessage(Direction direction, Class<?> objectType, String message) {
+    private static String buildMessage(SerializationOperation operation, Class<?> type, String customMessage) {
         StringBuilder sb = new StringBuilder();
+        sb.append("Failed to ");
         
-        if (direction != null) {
-            sb.append(direction == Direction.SERIALIZE ? "Serialization" : "Deserialization");
-            sb.append(" failed");
-            
-            if (objectType != null) {
-                sb.append(" for type ").append(objectType.getName());
-            }
-            
-            if (message != null && !message.isEmpty()) {
-                sb.append(": ").append(message);
-            }
-        } else if (message != null && !message.isEmpty()) {
-            sb.append(message);
-        } else {
-            sb.append("Serialization error");
+        switch (operation) {
+            case SERIALIZE:
+                sb.append("serialize");
+                break;
+            case DESERIALIZE:
+                sb.append("deserialize");
+                break;
+            case TO_MAP:
+                sb.append("convert to map");
+                break;
+            case FROM_MAP:
+                sb.append("convert from map");
+                break;
+            default:
+                sb.append("perform operation on");
+                break;
+        }
+        
+        if (type != null) {
+            sb.append(" ").append(type.getName());
+        }
+        
+        if (customMessage != null && !customMessage.isEmpty()) {
+            sb.append(": ").append(customMessage);
         }
         
         return sb.toString();
+    }
+    
+    /**
+     * Enum representing serialization operations.
+     */
+    public enum SerializationOperation {
+        /**
+         * Serialization (converting an object to a serialized format).
+         */
+        SERIALIZE,
+        
+        /**
+         * Deserialization (converting a serialized format to an object).
+         */
+        DESERIALIZE,
+        
+        /**
+         * Converting an object to a map.
+         */
+        TO_MAP,
+        
+        /**
+         * Converting a map to an object.
+         */
+        FROM_MAP,
+        
+        /**
+         * Unknown or unspecified operation.
+         */
+        UNKNOWN
     }
 }
