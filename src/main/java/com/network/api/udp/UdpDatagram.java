@@ -1,41 +1,43 @@
 package com.network.api.udp;
 
 import java.net.InetSocketAddress;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Objects;
 
 /**
  * Represents a UDP datagram.
  * 
- * <p>This class encapsulates the data and addressing information of a UDP datagram.
+ * <p>This class encapsulates the data and metadata of a UDP datagram,
+ * such as the sender address, data, and timestamp.
  */
 public class UdpDatagram {
     
     private final byte[] data;
     private final InetSocketAddress senderAddress;
-    private final long receiveTime;
+    private final Instant receiveTime;
     
     /**
      * Creates a new UDP datagram.
      * 
      * @param data the datagram data
-     * @param senderAddress the sender's address
+     * @param senderAddress the sender address
      */
     public UdpDatagram(byte[] data, InetSocketAddress senderAddress) {
-        this(data, senderAddress, System.currentTimeMillis());
+        this(data, senderAddress, Instant.now());
     }
     
     /**
-     * Creates a new UDP datagram with the specified receive time.
+     * Creates a new UDP datagram with a specific receive time.
      * 
      * @param data the datagram data
-     * @param senderAddress the sender's address
-     * @param receiveTime the time when the datagram was received, in milliseconds since epoch
+     * @param senderAddress the sender address
+     * @param receiveTime the time the datagram was received
      */
-    public UdpDatagram(byte[] data, InetSocketAddress senderAddress, long receiveTime) {
-        this.data = Arrays.copyOf(data, data.length);
+    public UdpDatagram(byte[] data, InetSocketAddress senderAddress, Instant receiveTime) {
+        this.data = data != null ? Arrays.copyOf(data, data.length) : new byte[0];
         this.senderAddress = senderAddress;
-        this.receiveTime = receiveTime;
+        this.receiveTime = receiveTime != null ? receiveTime : Instant.now();
     }
     
     /**
@@ -48,25 +50,25 @@ public class UdpDatagram {
     }
     
     /**
-     * Gets the sender's address.
+     * Gets the sender address.
      * 
-     * @return the sender's address
+     * @return the sender address
      */
     public InetSocketAddress getSenderAddress() {
         return senderAddress;
     }
     
     /**
-     * Gets the time when the datagram was received.
+     * Gets the time the datagram was received.
      * 
-     * @return the receive time, in milliseconds since epoch
+     * @return the receive time
      */
-    public long getReceiveTime() {
+    public Instant getReceiveTime() {
         return receiveTime;
     }
     
     /**
-     * Gets the data length.
+     * Gets the length of the datagram data.
      * 
      * @return the data length in bytes
      */
@@ -74,46 +76,14 @@ public class UdpDatagram {
         return data.length;
     }
     
-    /**
-     * Gets the datagram data as a string.
-     * 
-     * <p>The data is decoded using the UTF-8 charset.
-     * 
-     * @return the data as a string
-     */
-    public String getDataAsString() {
-        return new String(data);
-    }
-    
-    /**
-     * Gets the datagram data as a string using the specified charset.
-     * 
-     * @param charsetName the charset name
-     * @return the data as a string
-     * @throws java.nio.charset.UnsupportedCharsetException if the charset is not supported
-     */
-    public String getDataAsString(String charsetName) {
-        return new String(data, java.nio.charset.Charset.forName(charsetName));
-    }
-    
-    /**
-     * Gets the datagram data as a string using the specified charset.
-     * 
-     * @param charset the charset
-     * @return the data as a string
-     */
-    public String getDataAsString(java.nio.charset.Charset charset) {
-        return new String(data, charset);
-    }
-    
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         UdpDatagram that = (UdpDatagram) o;
-        return receiveTime == that.receiveTime &&
-               Arrays.equals(data, that.data) &&
-               Objects.equals(senderAddress, that.senderAddress);
+        return Arrays.equals(data, that.data) &&
+               Objects.equals(senderAddress, that.senderAddress) &&
+               Objects.equals(receiveTime, that.receiveTime);
     }
     
     @Override
@@ -126,7 +96,7 @@ public class UdpDatagram {
     @Override
     public String toString() {
         return "UdpDatagram{" +
-               "length=" + data.length +
+               "dataLength=" + data.length +
                ", senderAddress=" + senderAddress +
                ", receiveTime=" + receiveTime +
                '}';
