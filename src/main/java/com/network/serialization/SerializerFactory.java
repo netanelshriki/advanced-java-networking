@@ -2,24 +2,23 @@ package com.network.serialization;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Supplier;
+import java.util.Optional;
 
 /**
- * Factory for creating serializers by content type.
+ * Factory for creating and managing serializers.
  * 
- * <p>This class provides methods for registering and retrieving serializers
- * for different content types.
+ * <p>This class provides methods for creating serializers for various content types
+ * and maintaining a registry of serializers.
  */
 public final class SerializerFactory {
     
-    private static final Map<String, Supplier<Serializer>> serializers = new HashMap<>();
+    private static final Map<String, Serializer> serializersByContentType = new HashMap<>();
+    private static final Map<String, SerializerBuilder> buildersByContentType = new HashMap<>();
     
+    // Register default serializers
     static {
-        // Register default serializers
-        register("application/json", JsonSerializer::create);
-        register("application/json;*", JsonSerializer::create);
-        register("text/json", JsonSerializer::create);
-        register("text/json;*", JsonSerializer::create);
+        registerSerializer("application/json", new JsonSerializer());
+        registerSerializerBuilder("application/json", JsonSerializer.builder());
     }
     
     private SerializerFactory() {
@@ -28,98 +27,175 @@ public final class SerializerFactory {
     }
     
     /**
+     * Creates a serializer for the specified content type.
+     * 
+     * <p>If a serializer for the content type is not registered, this method
+     * falls back to a JSON serializer.
+     * 
+     * @param contentType the content type
+     * @return a serializer for the content type
+     */
+    public static Serializer createSerializer(String contentType) {
+        if (contentType == null) {
+            return getDefaultSerializer();
+        }
+        
+        // Extract the base content type (ignore parameters)
+        String baseContentType = contentType.split(";")[0].trim().toLowerCase();
+        
+        synchronized (serializersByContentType) {
+            Serializer serializer = serializersByContentType.get(baseContentType);
+            if (serializer != null) {
+                return serializer;
+            }
+            
+            // Try to create from builder
+            SerializerBuilder builder = buildersByContentType.get(baseContentType);
+            if (builder != null) {
+                Serializer newSerializer = builder.build();
+                serializersByContentType.put(baseContentType, newSerializer);
+                return newSerializer;
+            }
+            
+            // Fall back to default
+            return getDefaultSerializer();
+        }
+    }
+    
+    /**
+     * Creates a builder for the specified content type.
+     * 
+     * <p>If a builder for the content type is not registered, this method
+     * falls back to a JSON serializer builder.
+     * 
+     * @param contentType the content type
+     * @return a builder for the content type
+     */
+    public static SerializerBuilder createBuilder(String contentType) {
+        if (contentType == null) {
+            return getDefaultBuilder();
+        }
+        
+        // Extract the base content type (ignore parameters)
+        String baseContentType = contentType.split(";")[0].trim().toLowerCase();
+        
+        synchronized (buildersByContentType) {
+            SerializerBuilder builder = buildersByContentType.get(baseContentType);
+            if (builder != null) {
+                return builder;
+            }
+            
+            // Fall back to default
+            return getDefaultBuilder();
+        }
+    }
+    
+    /**
      * Registers a serializer for a content type.
      * 
      * @param contentType the content type
-     * @param supplier the supplier that creates serializer instances
-     * @throws IllegalArgumentException if contentType or supplier is null
+     * @param serializer the serializer
      */
-    public static void register(String contentType, Supplier<Serializer> supplier) {
-        if (contentType == null) {
-            throw new IllegalArgumentException("Content type must not be null");
-        }
-        if (supplier == null) {
-            throw new IllegalArgumentException("Supplier must not be null");
+    public static void registerSerializer(String contentType, Serializer serializer) {
+        if (contentType == null || serializer == null) {
+            return;
         }
         
-        serializers.put(contentType.toLowerCase(), supplier);
+        String baseContentType = contentType.split(";")[0].trim().toLowerCase();
+        
+        synchronized (serializersByContentType) {
+            serializersByContentType.put(baseContentType, serializer);
+        }
     }
     
     /**
-     * Gets a serializer for a content type.
-     * 
-     * <p>This method returns a serializer that can handle the specified content type.
-     * If no exact match is found, it tries to match the base content type without parameters.
+     * Registers a serializer builder for a content type.
      * 
      * @param contentType the content type
-     * @return the serializer, or null if no matching serializer is found
+     * @param builder the serializer builder
      */
-    public static Serializer getSerializer(String contentType) {
-        if (contentType == null) {
-            return null;
+    public static void registerSerializerBuilder(String contentType, SerializerBuilder builder) {
+        if (contentType == null || builder == null) {
+            return;
         }
         
-        String normalizedContentType = normalizeContentType(contentType);
+        String baseContentType = contentType.split(";")[0].trim().toLowerCase();
         
-        // Try exact match first
-        Supplier<Serializer> supplier = serializers.get(normalizedContentType);
-        
-        // If not found, try with wildcard parameters
-        if (supplier == null && normalizedContentType.contains(";")) {
-            String baseType = normalizedContentType.split(";")[0];
-            supplier = serializers.get(baseType);
-            
-            // Try with wildcard
-            if (supplier == null) {
-                supplier = serializers.get(baseType + ";*");
-            }
+        synchronized (buildersByContentType) {
+            buildersByContentType.put(baseContentType, builder);
         }
-        
-        // If still not found, try JSON as default for many types
-        if (supplier == null) {
-            if (normalizedContentType.contains("json") || 
-                normalizedContentType.contains("javascript")) {
-                supplier = serializers.get("application/json");
-            }
-        }
-        
-        return supplier != null ? supplier.get() : null;
     }
     
     /**
-     * Gets the default serializer.
+     * Gets the serializer registered for a content type.
      * 
-     * <p>This method returns the JSON serializer as the default.
+     * @param contentType the content type
+     * @return an Optional containing the serializer, or empty if not registered
+     */
+    public static Optional<Serializer> getSerializer(String contentType) {
+        if (contentType == null) {
+            return Optional.empty();
+        }
+        
+        String baseContentType = contentType.split(";")[0].trim().toLowerCase();
+        
+        synchronized (serializersByContentType) {
+            return Optional.ofNullable(serializersByContentType.get(baseContentType));
+        }
+    }
+    
+    /**
+     * Gets the builder registered for a content type.
+     * 
+     * @param contentType the content type
+     * @return an Optional containing the builder, or empty if not registered
+     */
+    public static Optional<SerializerBuilder> getBuilder(String contentType) {
+        if (contentType == null) {
+            return Optional.empty();
+        }
+        
+        String baseContentType = contentType.split(";")[0].trim().toLowerCase();
+        
+        synchronized (buildersByContentType) {
+            return Optional.ofNullable(buildersByContentType.get(baseContentType));
+        }
+    }
+    
+    /**
+     * Gets the default serializer (JSON).
      * 
      * @return the default serializer
      */
     public static Serializer getDefaultSerializer() {
-        return JsonSerializer.create();
+        return new JsonSerializer();
     }
     
     /**
-     * Normalizes a content type string.
+     * Gets the default serializer builder (JSON).
      * 
-     * <p>This method converts the content type to lowercase and trims whitespace.
-     * 
-     * @param contentType the content type to normalize
-     * @return the normalized content type
+     * @return the default serializer builder
      */
-    private static String normalizeContentType(String contentType) {
-        if (contentType == null) {
-            return "";
+    public static SerializerBuilder getDefaultBuilder() {
+        return JsonSerializer.builder();
+    }
+    
+    /**
+     * Clears all registered serializers and builders.
+     * 
+     * <p>This method is primarily intended for testing purposes.
+     */
+    public static void clearRegistry() {
+        synchronized (serializersByContentType) {
+            serializersByContentType.clear();
         }
         
-        String normalized = contentType.trim().toLowerCase();
-        
-        // Extract base content type and parameters
-        int paramIndex = normalized.indexOf(';');
-        if (paramIndex > 0) {
-            String baseType = normalized.substring(0, paramIndex).trim();
-            String params = normalized.substring(paramIndex).trim();
-            return baseType + params;
+        synchronized (buildersByContentType) {
+            buildersByContentType.clear();
         }
         
-        return normalized;
+        // Re-register defaults
+        registerSerializer("application/json", new JsonSerializer());
+        registerSerializerBuilder("application/json", JsonSerializer.builder());
     }
 }
