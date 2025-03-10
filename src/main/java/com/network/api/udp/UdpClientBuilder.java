@@ -54,66 +54,53 @@ public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder,
     UdpClientBuilder withLocalAddress(InetSocketAddress address);
     
     /**
-     * Sets whether to enable broadcasting.
+     * Sets whether to enable broadcast on this socket.
      * 
-     * <p>Broadcasting allows sending datagrams to all devices on the network.
+     * <p>Broadcast must be enabled to use broadcast methods.
      * 
-     * @param broadcast true to enable broadcasting, false to disable
+     * @param enableBroadcast true to enable broadcast, false to disable
      * @return this builder
      */
-    UdpClientBuilder withBroadcast(boolean broadcast);
+    UdpClientBuilder withBroadcast(boolean enableBroadcast);
     
     /**
-     * Sets the datagram buffer size.
+     * Sets whether to enable multicast on this socket.
      * 
-     * <p>This is the maximum size of datagrams that can be received.
+     * <p>Multicast must be enabled to join multicast groups.
+     * 
+     * @param enableMulticast true to enable multicast, false to disable
+     * @return this builder
+     */
+    UdpClientBuilder withMulticast(boolean enableMulticast);
+    
+    /**
+     * Sets the UDP receive buffer size.
      * 
      * @param size the buffer size in bytes
      * @return this builder
      * @throws IllegalArgumentException if size is not positive
      */
-    UdpClientBuilder withDatagramBufferSize(int size);
+    UdpClientBuilder withReceiveBufferSize(int size);
     
     /**
-     * Sets whether to enable IP multicast.
+     * Sets the UDP send buffer size.
      * 
-     * <p>Multicast allows sending datagrams to a group of devices on the network.
-     * 
-     * @param multicast true to enable multicast, false to disable
+     * @param size the buffer size in bytes
      * @return this builder
+     * @throws IllegalArgumentException if size is not positive
      */
-    UdpClientBuilder withMulticast(boolean multicast);
+    UdpClientBuilder withSendBufferSize(int size);
     
     /**
-     * Sets the multicast interface to use.
+     * Sets the maximum datagram size.
      * 
-     * <p>This is the network interface that will be used for multicast.
+     * <p>This is used for pre-allocating buffers for receiving datagrams.
      * 
-     * @param interfaceName the network interface name
+     * @param size the maximum datagram size in bytes
      * @return this builder
-     * @throws IllegalArgumentException if interfaceName is null
+     * @throws IllegalArgumentException if size is not positive
      */
-    UdpClientBuilder withMulticastInterface(String interfaceName);
-    
-    /**
-     * Sets the multicast TTL (time to live).
-     * 
-     * <p>The TTL determines how many hops a multicast packet can make.
-     * 
-     * @param ttl the time to live
-     * @return this builder
-     * @throws IllegalArgumentException if ttl is negative
-     */
-    UdpClientBuilder withMulticastTTL(int ttl);
-    
-    /**
-     * Sets the multicast groups to join when the client is connected.
-     * 
-     * @param multicastAddresses the multicast group addresses
-     * @return this builder
-     * @throws IllegalArgumentException if any address is not a valid multicast address
-     */
-    UdpClientBuilder withMulticastGroups(InetSocketAddress... multicastAddresses);
+    UdpClientBuilder withMaxDatagramSize(int size);
     
     /**
      * Sets whether to automatically connect when the client is built.
