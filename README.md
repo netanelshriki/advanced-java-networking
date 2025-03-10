@@ -28,6 +28,21 @@ This library implements modern design patterns and best practices to offer a com
 - Consistent error handling
 - Comprehensive testing
 
+## Implementation Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Core Framework | ✅ Complete | Core interfaces, configuration, exceptions |
+| TCP Client | ✅ Complete | Full Netty-based implementation |
+| HTTP Client Interfaces | ✅ Complete | All interfaces defined |
+| HTTP Client Implementation | 🟡 Partial | Config implemented, client pending |
+| Serialization Framework | ✅ Complete | JSON implementation with Jackson |
+| Middleware Framework | ✅ Complete | Interfaces and base classes |
+| Middleware Implementations | ✅ Complete | Logging, retry middleware |
+| UDP Client | 🔴 Not Started | Interfaces defined |
+| WebSocket Client | 🔴 Not Started | Interfaces defined |
+| Unit Tests | 🔴 Not Started | To be implemented |
+
 ## Getting Started
 
 Add the library to your Maven project:
