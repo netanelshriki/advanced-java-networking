@@ -10,15 +10,15 @@ import com.network.api.connection.Connection;
 import com.network.exception.NetworkException;
 
 /**
- * Client for UDP datagram communication.
+ * Client for UDP socket connections.
  * 
  * <p>This interface defines the operations for a UDP client that can send
  * and receive datagrams, and register event listeners.
  */
 public interface UdpClient extends NetworkClient {
-    
+
     /**
-     * Gets the remote address this client is connected or will send to.
+     * Gets the remote address this client is connected or will connect to.
      * 
      * @return the remote address
      */
@@ -48,86 +48,112 @@ public interface UdpClient extends NetworkClient {
     CompletableFuture<Void> sendAsync(byte[] data);
     
     /**
-     * Sends a datagram to the specified address.
+     * Sends a datagram to a specific address.
      * 
      * @param data the data to send
      * @param address the address to send to
      * @throws NetworkException if an error occurs
      */
-    void send(byte[] data, InetSocketAddress address) throws NetworkException;
+    void sendTo(byte[] data, InetSocketAddress address) throws NetworkException;
     
     /**
-     * Sends a datagram to the specified address asynchronously.
+     * Sends a datagram to a specific address asynchronously.
      * 
      * @param data the data to send
      * @param address the address to send to
      * @return a CompletableFuture that completes when the data has been sent
      */
-    CompletableFuture<Void> sendAsync(byte[] data, InetSocketAddress address);
+    CompletableFuture<Void> sendToAsync(byte[] data, InetSocketAddress address);
+    
+    /**
+     * Broadcasts a datagram to all devices on the network.
+     * 
+     * <p>This requires broadcast permission and will send to the broadcast
+     * address on the specified port.
+     * 
+     * @param data the data to send
+     * @param port the port to send to
+     * @throws NetworkException if an error occurs
+     */
+    void broadcast(byte[] data, int port) throws NetworkException;
+    
+    /**
+     * Broadcasts a datagram to all devices on the network asynchronously.
+     * 
+     * <p>This requires broadcast permission and will send to the broadcast
+     * address on the specified port.
+     * 
+     * @param data the data to send
+     * @param port the port to send to
+     * @return a CompletableFuture that completes when the data has been sent
+     */
+    CompletableFuture<Void> broadcastAsync(byte[] data, int port);
+    
+    /**
+     * Receives a datagram.
+     * 
+     * <p>This method blocks until a datagram is received or a timeout occurs.
+     * 
+     * @return the received datagram
+     * @throws NetworkException if an error occurs or a timeout occurs
+     */
+    UdpDatagram receive() throws NetworkException;
+    
+    /**
+     * Receives a datagram asynchronously.
+     * 
+     * @return a CompletableFuture that completes with the received datagram
+     */
+    CompletableFuture<UdpDatagram> receiveAsync();
+    
+    /**
+     * Registers a callback for when a datagram is received.
+     * 
+     * @param callback the callback to execute when a datagram is received
+     * @return this client instance for method chaining
+     */
+    UdpClient onDatagramReceived(Consumer<UdpDatagram> callback);
     
     /**
      * Registers a callback for when data is received.
      * 
+     * <p>This is similar to {@link #onDatagramReceived(Consumer)}, but provides
+     * only the data and not the datagram wrapper.
+     * 
      * @param callback the callback to execute when data is received
      * @return this client instance for method chaining
      */
-    UdpClient onDataReceived(BiConsumer<Connection, UdpDatagram> callback);
+    UdpClient onDataReceived(BiConsumer<Connection, byte[]> callback);
     
     /**
-     * Sets whether to enable broadcasting.
+     * Sets whether to enable broadcast on this socket.
      * 
-     * <p>Broadcasting allows sending datagrams to all devices on the network.
+     * <p>Broadcast must be enabled to use the {@link #broadcast(byte[], int)}
+     * method.
      * 
-     * @param broadcast true to enable broadcasting, false to disable
+     * @param enableBroadcast true to enable broadcast, false to disable
      * @return this client instance for method chaining
      * @throws IllegalStateException if the client is already connected
      */
-    UdpClient withBroadcast(boolean broadcast);
+    UdpClient withBroadcast(boolean enableBroadcast);
     
     /**
-     * Sets the datagram buffer size.
-     * 
-     * <p>This is the maximum size of datagrams that can be received.
+     * Sets the UDP receive buffer size.
      * 
      * @param size the buffer size in bytes
      * @return this client instance for method chaining
-     * @throws IllegalArgumentException if size is not positive
      * @throws IllegalStateException if the client is already connected
      */
-    UdpClient withDatagramBufferSize(int size);
+    UdpClient withReceiveBufferSize(int size);
     
     /**
-     * Sets whether to enable IP multicast.
+     * Sets the UDP send buffer size.
      * 
-     * <p>Multicast allows sending datagrams to a group of devices on the network.
-     * 
-     * @param multicast true to enable multicast, false to disable
+     * @param size the buffer size in bytes
      * @return this client instance for method chaining
      * @throws IllegalStateException if the client is already connected
      */
-    UdpClient withMulticast(boolean multicast);
-    
-    /**
-     * Joins a multicast group.
-     * 
-     * @param multicastAddress the multicast group address
-     * @return this client instance for method chaining
-     * @throws IllegalArgumentException if multicastAddress is not a valid multicast address
-     * @throws IllegalStateException if the client is not connected or multicast is not enabled
-     * @throws NetworkException if an error occurs while joining the group
-     */
-    UdpClient joinMulticastGroup(InetSocketAddress multicastAddress) throws NetworkException;
-    
-    /**
-     * Leaves a multicast group.
-     * 
-     * @param multicastAddress the multicast group address
-     * @return this client instance for method chaining
-     * @throws IllegalArgumentException if multicastAddress is not a valid multicast address
-     * @throws IllegalStateException if the client is not connected or multicast is not enabled
-     * @throws NetworkException if an error occurs while leaving the group
-     */
-    UdpClient leaveMulticastGroup(InetSocketAddress multicastAddress) throws NetworkException;
+    UdpClient withSendBufferSize(int size);
     
     /**
      * Factory method to create a new UDP client builder.
