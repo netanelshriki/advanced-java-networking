@@ -1,8 +1,8 @@
 package com.network.api.udp;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.Optional;
 
 import com.network.config.NetworkConfig;
@@ -16,25 +16,18 @@ import com.network.serialization.Serializer;
 public interface UdpClientConfig extends NetworkConfig {
     
     /**
-     * Gets the remote address to send datagrams to.
+     * Gets the remote address this client will connect to.
      * 
      * @return the remote address
      */
     InetSocketAddress getRemoteAddress();
     
     /**
-     * Gets the local address to bind to.
+     * Gets the local address this client will bind to.
      * 
      * @return an Optional containing the local address, or empty if not set
      */
     Optional<InetSocketAddress> getLocalAddress();
-    
-    /**
-     * Gets the network interface to use for multicast.
-     * 
-     * @return an Optional containing the network interface, or empty if not set
-     */
-    Optional<InetAddress> getNetworkInterface();
     
     /**
      * Gets whether broadcasting is enabled.
@@ -44,32 +37,39 @@ public interface UdpClientConfig extends NetworkConfig {
     boolean isBroadcastEnabled();
     
     /**
-     * Gets the multicast time-to-live (TTL).
-     * 
-     * @return the time-to-live
-     */
-    int getMulticastTtl();
-    
-    /**
-     * Gets whether address reuse is enabled.
-     * 
-     * @return true if address reuse is enabled, false otherwise
-     */
-    boolean isReuseAddressEnabled();
-    
-    /**
-     * Gets the maximum datagram size.
-     * 
-     * @return the maximum datagram size in bytes
-     */
-    int getMaxDatagramSize();
-    
-    /**
-     * Gets the socket buffer size.
+     * Gets the datagram buffer size.
      * 
      * @return the buffer size in bytes
      */
-    int getBufferSize();
+    int getDatagramBufferSize();
+    
+    /**
+     * Gets whether multicast is enabled.
+     * 
+     * @return true if multicast is enabled, false otherwise
+     */
+    boolean isMulticastEnabled();
+    
+    /**
+     * Gets the multicast interface.
+     * 
+     * @return an Optional containing the interface name, or empty if not set
+     */
+    Optional<String> getMulticastInterface();
+    
+    /**
+     * Gets the multicast TTL (time to live).
+     * 
+     * @return the TTL
+     */
+    int getMulticastTTL();
+    
+    /**
+     * Gets the multicast groups to join when the client is connected.
+     * 
+     * @return the multicast groups
+     */
+    List<InetSocketAddress> getMulticastGroups();
     
     /**
      * Gets whether auto-connect is enabled.
