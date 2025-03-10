@@ -13,8 +13,8 @@ import com.network.exception.NetworkException;
 /**
  * Client for WebSocket connections.
  * 
- * <p>This interface defines the operations for a WebSocket client that can
- * establish connections, send and receive messages, and register event listeners.
+ * <p>This interface defines the operations for a WebSocket client that can establish
+ * connections, send and receive messages, and register event listeners.
  */
 public interface WebSocketClient extends NetworkClient {
 
@@ -26,89 +26,68 @@ public interface WebSocketClient extends NetworkClient {
     URI getUri();
     
     /**
-     * Gets the subprotocols that this client supports.
+     * Sends a text message over the WebSocket connection.
      * 
-     * @return the supported subprotocols
-     */
-    String[] getSubprotocols();
-    
-    /**
-     * Gets the negotiated subprotocol.
-     * 
-     * <p>This is the subprotocol that was agreed upon during the WebSocket
-     * handshake, or null if not connected or no subprotocol was negotiated.
-     * 
-     * @return the negotiated subprotocol, or null if not available
-     */
-    String getNegotiatedSubprotocol();
-    
-    /**
-     * Sends a text message.
-     * 
-     * @param message the message to send
+     * @param message the text message to send
      * @throws NetworkException if an error occurs or if not connected
      */
     void sendText(String message) throws NetworkException;
     
     /**
-     * Sends a text message asynchronously.
+     * Sends a text message over the WebSocket connection asynchronously.
      * 
-     * @param message the message to send
+     * @param message the text message to send
      * @return a CompletableFuture that completes when the message has been sent
      */
     CompletableFuture<Void> sendTextAsync(String message);
     
     /**
-     * Sends a binary message.
+     * Sends a binary message over the WebSocket connection.
      * 
-     * @param data the data to send
+     * @param data the binary message to send
      * @throws NetworkException if an error occurs or if not connected
      */
     void sendBinary(byte[] data) throws NetworkException;
     
     /**
-     * Sends a binary message asynchronously.
+     * Sends a binary message over the WebSocket connection asynchronously.
      * 
-     * @param data the data to send
+     * @param data the binary message to send
      * @return a CompletableFuture that completes when the message has been sent
      */
     CompletableFuture<Void> sendBinaryAsync(byte[] data);
     
     /**
-     * Sends a ping message.
+     * Sends a ping message over the WebSocket connection.
      * 
-     * <p>The server should respond with a pong message.
-     * 
-     * @param data the optional data to include in the ping, or null
+     * @param data the ping payload, or null for no payload
      * @throws NetworkException if an error occurs or if not connected
      */
     void sendPing(byte[] data) throws NetworkException;
     
     /**
-     * Sends a ping message asynchronously.
+     * Sends a ping message over the WebSocket connection asynchronously.
      * 
-     * <p>The server should respond with a pong message.
-     * 
-     * @param data the optional data to include in the ping, or null
-     * @return a CompletableFuture that completes when the ping has been sent
+     * @param data the ping payload, or null for no payload
+     * @return a CompletableFuture that completes when the message has been sent
      */
     CompletableFuture<Void> sendPingAsync(byte[] data);
     
     /**
-     * Sends a pong message in response to a ping.
+     * Closes the WebSocket connection with a normal closure code.
      * 
-     * @param data the data from the ping message, or null
-     * @throws NetworkException if an error occurs or if not connected
+     * @throws NetworkException if an error occurs
      */
-    void sendPong(byte[] data) throws NetworkException;
+    void close() throws NetworkException;
     
     /**
-     * Sends a pong message in response to a ping asynchronously.
+     * Closes the WebSocket connection with the specified code and reason.
      * 
-     * @param data the data from the ping message, or null
-     * @return a CompletableFuture that completes when the pong has been sent
+     * @param code the closure code
+     * @param reason the closure reason, or null for no reason
+     * @throws NetworkException if an error occurs
      */
-    CompletableFuture<Void> sendPongAsync(byte[] data);
+    void close(int code, String reason) throws NetworkException;
     
     /**
      * Registers a callback for when a text message is received.
@@ -129,8 +108,6 @@ public interface WebSocketClient extends NetworkClient {
     /**
      * Registers a callback for when a ping message is received.
      * 
-     * <p>The client will automatically respond with a pong message.
-     * 
      * @param callback the callback to execute when a ping message is received
      * @return this client instance for method chaining
      */
@@ -145,44 +122,84 @@ public interface WebSocketClient extends NetworkClient {
     WebSocketClient onPong(BiConsumer<Connection, byte[]> callback);
     
     /**
-     * Sets headers to include in the WebSocket handshake.
+     * Sets the maximum frame size.
      * 
-     * @param headers the headers
+     * <p>This is the maximum size of WebSocket frames that can be received by this client.
+     * 
+     * @param size the maximum frame size in bytes
      * @return this client instance for method chaining
+     * @throws IllegalArgumentException if size is not positive
      * @throws IllegalStateException if the client is already connected
      */
-    WebSocketClient withHeaders(Map<String, String> headers);
+    WebSocketClient withMaxFrameSize(int size);
     
     /**
-     * Sets a header to include in the WebSocket handshake.
+     * Sets the maximum message size.
      * 
-     * @param name the header name
-     * @param value the header value
+     * <p>This is the maximum size of WebSocket messages that can be received by this client.
+     * 
+     * @param size the maximum message size in bytes
      * @return this client instance for method chaining
+     * @throws IllegalArgumentException if size is not positive
      * @throws IllegalStateException if the client is already connected
      */
-    WebSocketClient withHeader(String name, String value);
+    WebSocketClient withMaxMessageSize(int size);
     
     /**
-     * Sets the subprotocols that this client supports.
-     * 
-     * <p>The server will select one of these protocols during the WebSocket
-     * handshake, or none if it doesn't support any of them.
-     * 
-     * @param subprotocols the supported subprotocols
-     * @return this client instance for method chaining
-     * @throws IllegalStateException if the client is already connected
-     */
-    WebSocketClient withSubprotocols(String... subprotocols);
-    
-    /**
-     * Sets whether to enable compression for WebSocket messages.
+     * Sets whether to enable message compression.
      * 
      * @param compression true to enable compression, false to disable
      * @return this client instance for method chaining
      * @throws IllegalStateException if the client is already connected
      */
     WebSocketClient withCompression(boolean compression);
+    
+    /**
+     * Adds a sub-protocol to be requested during the WebSocket handshake.
+     * 
+     * @param protocol the sub-protocol to add
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if protocol is null or empty
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withSubProtocol(String protocol);
+    
+    /**
+     * Adds a custom header to be sent during the WebSocket handshake.
+     * 
+     * @param name the header name
+     * @param value the header value
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if name is null or empty
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withHeader(String name, String value);
+    
+    /**
+     * Sets the ping interval.
+     * 
+     * <p>If set to a positive duration, the client will automatically send ping
+     * messages at this interval to keep the connection alive.
+     * 
+     * @param interval the ping interval, or Duration.ZERO to disable
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if interval is negative
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withPingInterval(java.time.Duration interval);
+    
+    /**
+     * Sets the pong timeout.
+     * 
+     * <p>If a pong response is not received within this timeout after sending a ping,
+     * the connection will be considered closed.
+     * 
+     * @param timeout the pong timeout
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if timeout is negative
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withPongTimeout(java.time.Duration timeout);
     
     /**
      * Factory method to create a new WebSocket client builder.
