@@ -1,6 +1,5 @@
 package com.network.api.udp;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
 import java.util.function.Consumer;
@@ -17,7 +16,7 @@ import com.network.serialization.Serializer;
 public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder, UdpClientConfig> {
     
     /**
-     * Sets the remote address to send datagrams to.
+     * Sets the remote address to connect to.
      * 
      * @param host the host name or IP address
      * @param port the port number
@@ -27,7 +26,7 @@ public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder,
     UdpClientBuilder withAddress(String host, int port);
     
     /**
-     * Sets the remote address to send datagrams to.
+     * Sets the remote address to connect to.
      * 
      * @param address the socket address
      * @return this builder
@@ -55,18 +54,9 @@ public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder,
     UdpClientBuilder withLocalAddress(InetSocketAddress address);
     
     /**
-     * Sets the network interface to use for multicast.
-     * 
-     * @param networkInterface the network interface
-     * @return this builder
-     * @throws IllegalArgumentException if networkInterface is null
-     */
-    UdpClientBuilder withNetworkInterface(InetAddress networkInterface);
-    
-    /**
      * Sets whether to enable broadcasting.
      * 
-     * <p>If enabled, datagrams can be sent to a broadcast address.
+     * <p>Broadcasting allows sending datagrams to all devices on the network.
      * 
      * @param broadcast true to enable broadcasting, false to disable
      * @return this builder
@@ -74,46 +64,56 @@ public interface UdpClientBuilder extends NetworkConfigBuilder<UdpClientBuilder,
     UdpClientBuilder withBroadcast(boolean broadcast);
     
     /**
-     * Sets the multicast time-to-live (TTL).
-     * 
-     * <p>This sets the time-to-live for multicast datagrams
-     * (i.e., how many "hops" they can make).
-     * 
-     * @param ttl the time-to-live
-     * @return this builder
-     * @throws IllegalArgumentException if ttl is negative
-     */
-    UdpClientBuilder withMulticastTtl(int ttl);
-    
-    /**
-     * Sets whether to reuse addresses.
-     * 
-     * <p>If enabled, the socket can be bound to an address that is already in use.
-     * 
-     * @param reuseAddress true to enable reuse, false to disable
-     * @return this builder
-     */
-    UdpClientBuilder withReuseAddress(boolean reuseAddress);
-    
-    /**
-     * Sets the maximum datagram size.
+     * Sets the datagram buffer size.
      * 
      * <p>This is the maximum size of datagrams that can be received.
-     * 
-     * @param size the maximum datagram size in bytes
-     * @return this builder
-     * @throws IllegalArgumentException if size is not positive
-     */
-    UdpClientBuilder withMaxDatagramSize(int size);
-    
-    /**
-     * Sets the socket buffer size.
      * 
      * @param size the buffer size in bytes
      * @return this builder
      * @throws IllegalArgumentException if size is not positive
      */
-    UdpClientBuilder withBufferSize(int size);
+    UdpClientBuilder withDatagramBufferSize(int size);
+    
+    /**
+     * Sets whether to enable IP multicast.
+     * 
+     * <p>Multicast allows sending datagrams to a group of devices on the network.
+     * 
+     * @param multicast true to enable multicast, false to disable
+     * @return this builder
+     */
+    UdpClientBuilder withMulticast(boolean multicast);
+    
+    /**
+     * Sets the multicast interface to use.
+     * 
+     * <p>This is the network interface that will be used for multicast.
+     * 
+     * @param interfaceName the network interface name
+     * @return this builder
+     * @throws IllegalArgumentException if interfaceName is null
+     */
+    UdpClientBuilder withMulticastInterface(String interfaceName);
+    
+    /**
+     * Sets the multicast TTL (time to live).
+     * 
+     * <p>The TTL determines how many hops a multicast packet can make.
+     * 
+     * @param ttl the time to live
+     * @return this builder
+     * @throws IllegalArgumentException if ttl is negative
+     */
+    UdpClientBuilder withMulticastTTL(int ttl);
+    
+    /**
+     * Sets the multicast groups to join when the client is connected.
+     * 
+     * @param multicastAddresses the multicast group addresses
+     * @return this builder
+     * @throws IllegalArgumentException if any address is not a valid multicast address
+     */
+    UdpClientBuilder withMulticastGroups(InetSocketAddress... multicastAddresses);
     
     /**
      * Sets whether to automatically connect when the client is built.
