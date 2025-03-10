@@ -1,6 +1,5 @@
 package com.network.api.websocket;
 
-import java.net.URI;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -12,17 +11,17 @@ import com.network.exception.NetworkException;
 /**
  * Client for WebSocket connections.
  * 
- * <p>This interface defines the operations for a WebSocket client that can
- * establish connections, send and receive messages, and register event listeners.
+ * <p>This interface defines the operations for a WebSocket client that can establish
+ * connections, send and receive messages, and register event listeners.
  */
 public interface WebSocketClient extends NetworkClient {
     
     /**
-     * Gets the WebSocket URI this client is connected or will connect to.
+     * Gets the URL this client is connected or will connect to.
      * 
-     * @return the WebSocket URI
+     * @return the WebSocket URL
      */
-    URI getUri();
+    String getUrl();
     
     /**
      * Sends a text message over the current connection.
@@ -59,55 +58,19 @@ public interface WebSocketClient extends NetworkClient {
     /**
      * Sends a ping message over the current connection.
      * 
-     * @param data the ping data, or null for an empty ping
+     * @param data the application data to include in the ping, or null for none
      * @throws NetworkException if an error occurs or if not connected
      */
     void sendPing(byte[] data) throws NetworkException;
     
     /**
-     * Sends a ping message over the current connection asynchronously.
+     * Sends a close frame to initiate a graceful connection close.
      * 
-     * @param data the ping data, or null for an empty ping
-     * @return a CompletableFuture that completes when the ping has been sent
-     */
-    CompletableFuture<Void> sendPingAsync(byte[] data);
-    
-    /**
-     * Sends a pong message over the current connection.
-     * 
-     * <p>Pong messages are typically sent in response to ping messages,
-     * but can also be sent unsolicited as a unidirectional heartbeat.
-     * 
-     * @param data the pong data, or null for an empty pong
+     * @param statusCode the close status code
+     * @param reason the close reason, or null for none
      * @throws NetworkException if an error occurs or if not connected
      */
-    void sendPong(byte[] data) throws NetworkException;
-    
-    /**
-     * Sends a pong message over the current connection asynchronously.
-     * 
-     * @param data the pong data, or null for an empty pong
-     * @return a CompletableFuture that completes when the pong has been sent
-     */
-    CompletableFuture<Void> sendPongAsync(byte[] data);
-    
-    /**
-     * Closes the WebSocket connection with the specified status code and reason.
-     * 
-     * @param statusCode the status code
-     * @param reason the reason for closing, or null
-     * @throws NetworkException if an error occurs
-     */
     void close(int statusCode, String reason) throws NetworkException;
-    
-    /**
-     * Closes the WebSocket connection with the specified status code and reason asynchronously.
-     * 
-     * @param statusCode the status code
-     * @param reason the reason for closing, or null
-     * @return a CompletableFuture that completes when the connection is closed
-     */
-    CompletableFuture<Void> closeAsync(int statusCode, String reason);
     
     /**
      * Registers a callback for when a text message is received.
@@ -128,11 +91,10 @@ public interface WebSocketClient extends NetworkClient {
     /**
      * Registers a callback for when a ping message is received.
      * 
-     * <p>Note that the WebSocket protocol requires that a pong message be sent
-     * in response to a ping message. This is handled automatically, but you can
-     * register a callback to be notified when a ping is received.
+     * <p>Note that the client automatically responds to pings with pongs,
+     * so this callback is purely informational.
      * 
-     * @param callback the callback to execute when a ping message is received
+     * @param callback the callback to execute when a ping is received
      * @return this client instance for method chaining
      */
     WebSocketClient onPing(BiConsumer<Connection, byte[]> callback);
@@ -140,10 +102,41 @@ public interface WebSocketClient extends NetworkClient {
     /**
      * Registers a callback for when a pong message is received.
      * 
-     * @param callback the callback to execute when a pong message is received
+     * @param callback the callback to execute when a pong is received
      * @return this client instance for method chaining
      */
     WebSocketClient onPong(BiConsumer<Connection, byte[]> callback);
+    
+    /**
+     * Sets an HTTP header to include in the WebSocket handshake request.
+     * 
+     * @param name the header name
+     * @param value the header value
+     * @return this client instance for method chaining
+     * @throws IllegalArgumentException if name is null
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withHeader(String name, String value);
+    
+    /**
+     * Sets the WebSocket subprotocols to request.
+     * 
+     * @param subprotocols the subprotocols
+     * @return this client instance for method chaining
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withSubprotocols(String... subprotocols);
+    
+    /**
+     * Sets the compression enabled flag.
+     * 
+     * <p>If enabled, the client will negotiate compression with the server.
+     * 
+     * @param compression true to enable compression, false to disable
+     * @return this client instance for method chaining
+     * @throws IllegalStateException if the client is already connected
+     */
+    WebSocketClient withCompression(boolean compression);
     
     /**
      * Factory method to create a new WebSocket client builder.
