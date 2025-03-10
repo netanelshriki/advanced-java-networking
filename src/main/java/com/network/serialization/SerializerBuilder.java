@@ -4,34 +4,12 @@ import java.nio.charset.Charset;
 import java.util.function.Consumer;
 
 /**
- * Builder for serializers.
+ * Builder for creating serializer instances.
  * 
- * <p>This interface defines the methods for configuring and creating
- * serializer instances with various options.
- * 
- * @param <T> the type of the builder (for method chaining)
+ * <p>This interface defines methods for configuring serialization options
+ * and creating serializer instances with those configurations.
  */
-public interface SerializerBuilder<T extends SerializerBuilder<T>> {
-    
-    /**
-     * Sets the charset to use for string conversions.
-     * 
-     * @param charset the charset
-     * @return this builder
-     * @throws IllegalArgumentException if charset is null
-     */
-    T withCharset(Charset charset);
-    
-    /**
-     * Sets the date format pattern to use for serializing dates.
-     * 
-     * <p>The pattern should be compatible with {@link java.text.SimpleDateFormat}.
-     * 
-     * @param pattern the date format pattern
-     * @return this builder
-     * @throws IllegalArgumentException if pattern is null or invalid
-     */
-    T withDateFormat(String pattern);
+public interface SerializerBuilder {
     
     /**
      * Sets whether to pretty-print serialized output.
@@ -42,69 +20,88 @@ public interface SerializerBuilder<T extends SerializerBuilder<T>> {
      * @param prettyPrint true to enable pretty-printing, false to disable
      * @return this builder
      */
-    T withPrettyPrint(boolean prettyPrint);
+    SerializerBuilder withPrettyPrint(boolean prettyPrint);
     
     /**
-     * Sets whether to serialize null values.
+     * Sets the charset to use for string serialization and deserialization.
      * 
-     * <p>If disabled, properties with null values will be omitted
-     * from the serialized output.
-     * 
-     * @param serializeNulls true to serialize null values, false to omit them
+     * @param charset the charset
      * @return this builder
+     * @throws IllegalArgumentException if charset is null
      */
-    T withSerializeNulls(boolean serializeNulls);
+    SerializerBuilder withCharset(Charset charset);
     
     /**
-     * Sets whether to use the property name as-is.
+     * Sets whether to ignore unknown properties during deserialization.
      * 
-     * <p>If disabled, property names may be transformed according
-     * to the serializer's naming strategy, such as to camelCase or snake_case.
+     * <p>If true, unknown properties in the serialized data will be ignored
+     * when deserializing to a Java object. If false, an exception will be thrown.
      * 
-     * @param usePropertyName true to use property names as-is, false to transform them
+     * @param ignoreUnknown true to ignore unknown properties, false to throw an exception
      * @return this builder
      */
-    T withUsePropertyName(boolean usePropertyName);
+    SerializerBuilder withIgnoreUnknownProperties(boolean ignoreUnknown);
     
     /**
-     * Sets the naming strategy to use for property names.
+     * Sets whether to fail on null values during serialization.
      * 
-     * <p>The naming strategy determines how Java property names are
-     * transformed in the serialized output.
+     * <p>If true, null values in Java objects will cause serialization to fail.
+     * If false, null values will be serialized normally.
      * 
-     * @param strategy the naming strategy
+     * @param failOnNull true to fail on null values, false to serialize them normally
      * @return this builder
-     * @throws IllegalArgumentException if strategy is null
      */
-    T withNamingStrategy(NamingStrategy strategy);
+    SerializerBuilder withFailOnNull(boolean failOnNull);
     
     /**
-     * Sets the field visibility level for serialization.
+     * Sets whether to fail on empty beans during serialization.
      * 
-     * <p>This determines which fields are included in serialization
-     * based on their visibility modifiers.
+     * <p>If true, attempting to serialize an empty bean (one with no properties)
+     * will cause serialization to fail. If false, empty beans will be serialized
+     * as empty objects.
      * 
-     * @param visibility the field visibility level
+     * @param failOnEmptyBeans true to fail on empty beans, false to serialize them normally
      * @return this builder
-     * @throws IllegalArgumentException if visibility is null
      */
-    T withFieldVisibility(FieldVisibility visibility);
+    SerializerBuilder withFailOnEmptyBeans(boolean failOnEmptyBeans);
+    
+    /**
+     * Sets whether dates should be serialized as timestamps.
+     * 
+     * <p>If true, dates will be serialized as numeric timestamps.
+     * If false, dates will be serialized in a format specified by the serializer.
+     * 
+     * @param writeDatesAsTimestamps true to write dates as timestamps, false to use a formatted representation
+     * @return this builder
+     */
+    SerializerBuilder withWriteDatesAsTimestamps(boolean writeDatesAsTimestamps);
+    
+    /**
+     * Sets whether to include null values in the serialized output.
+     * 
+     * <p>If true, properties with null values will be included in the serialized output.
+     * If false, properties with null values will be omitted.
+     * 
+     * @param includeNulls true to include null values, false to omit them
+     * @return this builder
+     */
+    SerializerBuilder withIncludeNulls(boolean includeNulls);
     
     /**
      * Sets a custom property for the serializer.
      * 
-     * <p>Custom properties allow for serializer-specific configuration
-     * that is not covered by the standard builder methods.
+     * <p>This method allows setting serializer-specific properties that are not
+     * covered by the other methods in this interface.
      * 
      * @param key the property key
      * @param value the property value
      * @return this builder
      * @throws IllegalArgumentException if key is null
      */
-    T withProperty(String key, Object value);
+    SerializerBuilder withProperty(String key, Object value);
     
     /**
-     * Configures the serializer using the given consumer.
+     * Configures the builder using the given consumer.
      * 
      * <p>This method allows for more complex configuration that may require
      * multiple builder calls.
@@ -113,83 +110,12 @@ public interface SerializerBuilder<T extends SerializerBuilder<T>> {
      * @return this builder
      * @throws IllegalArgumentException if configurer is null
      */
-    T configure(Consumer<T> configurer);
+    SerializerBuilder configure(Consumer<SerializerBuilder> configurer);
     
     /**
-     * Builds the serializer with the configured options.
+     * Builds a serializer with the configured options.
      * 
-     * @return the built serializer
-     * @throws IllegalStateException if the builder is not properly configured
+     * @return the configured serializer
      */
     Serializer build();
-    
-    /**
-     * Enum representing naming strategies for serialized property names.
-     */
-    enum NamingStrategy {
-        /**
-         * Use the property names as-is.
-         */
-        IDENTITY,
-        
-        /**
-         * Convert property names to camelCase.
-         */
-        CAMEL_CASE,
-        
-        /**
-         * Convert property names to PascalCase.
-         */
-        PASCAL_CASE,
-        
-        /**
-         * Convert property names to snake_case.
-         */
-        SNAKE_CASE,
-        
-        /**
-         * Convert property names to kebab-case.
-         */
-        KEBAB_CASE,
-        
-        /**
-         * Convert property names to UPPER_SNAKE_CASE.
-         */
-        UPPER_SNAKE_CASE
-    }
-    
-    /**
-     * Enum representing field visibility levels for serialization.
-     */
-    enum FieldVisibility {
-        /**
-         * Include only public fields.
-         */
-        PUBLIC,
-        
-        /**
-         * Include public and protected fields.
-         */
-        PROTECTED,
-        
-        /**
-         * Include public, protected, and package-private fields.
-         */
-        PACKAGE,
-        
-        /**
-         * Include all fields (public, protected, package-private, and private).
-         */
-        PRIVATE,
-        
-        /**
-         * Include only fields that are explicitly annotated for serialization.
-         */
-        ANNOTATED_ONLY,
-        
-        /**
-         * Exclude all fields (use only getters/setters).
-         */
-        NONE
-    }
 }
