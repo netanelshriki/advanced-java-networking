@@ -2,7 +2,6 @@ package com.network.api.udp;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
-import java.util.List;
 import java.util.Optional;
 
 import com.network.config.NetworkConfig;
@@ -30,46 +29,39 @@ public interface UdpClientConfig extends NetworkConfig {
     Optional<InetSocketAddress> getLocalAddress();
     
     /**
-     * Gets whether broadcasting is enabled.
+     * Gets whether broadcast is enabled on this socket.
      * 
-     * @return true if broadcasting is enabled, false otherwise
+     * @return true if broadcast is enabled, false otherwise
      */
     boolean isBroadcastEnabled();
     
     /**
-     * Gets the datagram buffer size.
-     * 
-     * @return the buffer size in bytes
-     */
-    int getDatagramBufferSize();
-    
-    /**
-     * Gets whether multicast is enabled.
+     * Gets whether multicast is enabled on this socket.
      * 
      * @return true if multicast is enabled, false otherwise
      */
     boolean isMulticastEnabled();
     
     /**
-     * Gets the multicast interface.
+     * Gets the UDP receive buffer size.
      * 
-     * @return an Optional containing the interface name, or empty if not set
+     * @return the receive buffer size in bytes
      */
-    Optional<String> getMulticastInterface();
+    int getReceiveBufferSize();
     
     /**
-     * Gets the multicast TTL (time to live).
+     * Gets the UDP send buffer size.
      * 
-     * @return the TTL
+     * @return the send buffer size in bytes
      */
-    int getMulticastTTL();
+    int getSendBufferSize();
     
     /**
-     * Gets the multicast groups to join when the client is connected.
+     * Gets the maximum datagram size.
      * 
-     * @return the multicast groups
+     * @return the maximum datagram size in bytes
      */
-    List<InetSocketAddress> getMulticastGroups();
+    int getMaxDatagramSize();
     
     /**
      * Gets whether auto-connect is enabled.
