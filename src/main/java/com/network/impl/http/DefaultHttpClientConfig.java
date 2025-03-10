@@ -17,6 +17,7 @@ import com.network.api.http.HttpClientConfig;
 import com.network.api.http.middleware.HttpMiddleware;
 import com.network.config.AbstractNetworkConfig;
 import com.network.serialization.Serializer;
+import com.network.serialization.SerializerFactory;
 
 /**
  * Default implementation of {@link HttpClientConfig}.
@@ -25,7 +26,7 @@ import com.network.serialization.Serializer;
  * interface with reasonable default values.
  */
 public class DefaultHttpClientConfig extends AbstractNetworkConfig implements HttpClientConfig {
-    
+
     private final URL baseUrl;
     private final Map<String, String> defaultHeaders;
     private final String defaultContentType;
@@ -156,23 +157,23 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
     /**
      * Builder for {@link DefaultHttpClientConfig}.
      */
-    public static class Builder extends AbstractNetworkConfigBuilder<Builder, HttpClientConfig>
+    public static class Builder extends AbstractNetworkConfigBuilder<Builder, HttpClientConfig> 
             implements HttpClientBuilder {
         
         private URL baseUrl;
-        private final Map<String, String> defaultHeaders = new HashMap<>();
-        private String defaultContentType;
-        private String defaultAccept;
-        private String userAgent = "NetworkLib HTTP Client/1.0";
+        private Map<String, String> defaultHeaders = new HashMap<>();
+        private String defaultContentType = "application/json";
+        private String defaultAccept = "application/json";
+        private String userAgent = "NetworkLib/1.0";
         private boolean followRedirects = true;
-        private int maxRedirects = 5;
+        private int maxRedirects = 10;
         private boolean verifySsl = true;
         private SSLContext sslContext;
-        private int maxConnectionsPerRoute = 10;
+        private int maxConnectionsPerRoute = 20;
         private int maxTotalConnections = 100;
         private Duration connectionTimeToLive = Duration.ofMinutes(5);
         private Serializer serializer;
-        private final List<HttpMiddleware> middleware = new ArrayList<>();
+        private List<HttpMiddleware> middleware = new ArrayList<>();
         private String proxyHost;
         private int proxyPort = -1;
         
@@ -200,21 +201,21 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
             super.bufferSize = config.getBufferSize();
             super.properties.putAll(config.getProperties());
             
-            config.getBaseUrl().ifPresent(url -> this.baseUrl = url);
+            this.baseUrl = config.getBaseUrl().orElse(null);
             this.defaultHeaders.putAll(config.getDefaultHeaders());
-            config.getDefaultContentType().ifPresent(ct -> this.defaultContentType = ct);
-            config.getDefaultAccept().ifPresent(a -> this.defaultAccept = a);
-            config.getUserAgent().ifPresent(ua -> this.userAgent = ua);
+            this.defaultContentType = config.getDefaultContentType().orElse(defaultContentType);
+            this.defaultAccept = config.getDefaultAccept().orElse(defaultAccept);
+            this.userAgent = config.getUserAgent().orElse(userAgent);
             this.followRedirects = config.isFollowRedirects();
             this.maxRedirects = config.getMaxRedirects();
             this.verifySsl = config.isVerifySsl();
-            config.getSslContext().ifPresent(sc -> this.sslContext = sc);
+            this.sslContext = config.getSslContext().orElse(null);
             this.maxConnectionsPerRoute = config.getMaxConnectionsPerRoute();
             this.maxTotalConnections = config.getMaxTotalConnections();
             this.connectionTimeToLive = config.getConnectionTimeToLive();
-            config.getSerializer().ifPresent(s -> this.serializer = s);
+            this.serializer = config.getSerializer().orElse(null);
             this.middleware.addAll(config.getMiddleware());
-            config.getProxyHost().ifPresent(h -> this.proxyHost = h);
+            this.proxyHost = config.getProxyHost().orElse(null);
             this.proxyPort = config.getProxyPort();
         }
         
@@ -265,7 +266,7 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
         @Override
         public Builder withDefaultAccept(String accept) {
             if (accept == null) {
-                throw new IllegalArgumentException("Accept header must not be null");
+                throw new IllegalArgumentException("Accept must not be null");
             }
             this.defaultAccept = accept;
             return this;
@@ -321,7 +322,7 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
                 this.sslContext = context;
                 return this;
             } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to create SSL context", e);
+                throw new IllegalArgumentException("Failed to initialize SSL context", e);
             }
         }
         
@@ -331,12 +332,13 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
                 throw new IllegalArgumentException("Trust store must not be null");
             }
             try {
-                javax.net.ssl.TrustManagerFactory tmf = javax.net.ssl.TrustManagerFactory.getInstance(
-                    javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+                javax.net.ssl.TrustManagerFactory tmf = 
+                    javax.net.ssl.TrustManagerFactory.getInstance(
+                        javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
                 tmf.init(trustStore);
                 return withTrustManagerFactory(tmf);
             } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to create trust manager factory", e);
+                throw new IllegalArgumentException("Failed to initialize trust manager factory", e);
             }
         }
         
@@ -373,6 +375,9 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
                 throw new IllegalArgumentException("Serializer must not be null");
             }
             this.serializer = serializer;
+            // Also set the default content type and accept to match the serializer
+            this.defaultContentType = serializer.getContentType();
+            this.defaultAccept = serializer.getContentType();
             return this;
         }
         
@@ -411,6 +416,11 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
         
         @Override
         public HttpClientConfig build() {
+            // Initialize serializer if not set
+            if (serializer == null) {
+                serializer = SerializerFactory.getInstance().getSerializer(defaultContentType);
+            }
+            
             return new DefaultHttpClientConfig(this);
         }
     }
