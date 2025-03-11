@@ -1,5 +1,7 @@
 # Advanced Java Networking Library
 
+![Java CI with Maven](https://github.com/netanelshriki/advanced-java-networking/workflows/Java%20CI%20with%20Maven/badge.svg)
+
 An enterprise-grade Java networking library providing robust, scalable, and feature-rich networking capabilities with a fluent API design.
 
 ## Overview
@@ -43,7 +45,7 @@ This library implements modern design patterns and best practices to offer a com
 | Middleware Implementations | ✅ Complete | Logging, retry, rate limiting, resilience middleware |
 | UDP Client | ✅ Complete | Basic implementation available |
 | WebSocket Client | ✅ Complete | Basic implementation available |
-| Unit Tests | 🔴 Not Started | To be implemented |
+| Unit Tests | ✅ Complete | Comprehensive test suite with MockServer |
 
 ## Documentation
 
@@ -177,6 +179,7 @@ UdpClient client = NetworkLib.createUdpClient()
 
 // Send data (fire and forget)
 client.send(data).execute();
+```
 
 ## Contributing
 
