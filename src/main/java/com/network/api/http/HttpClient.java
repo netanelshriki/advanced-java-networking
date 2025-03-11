@@ -6,6 +6,7 @@ import java.util.concurrent.CompletableFuture;
 
 import com.network.api.NetworkClient;
 import com.network.exception.NetworkException;
+import com.network.impl.http.DefaultHttpClientConfig;
 
 /**
  * Client for making HTTP requests.
@@ -69,7 +70,6 @@ public interface HttpClient extends NetworkClient {
      * @return a new HTTP client builder
      */
     static HttpClientBuilder builder() {
-        // This will be implemented by a concrete factory class
-        throw new UnsupportedOperationException("Not yet implemented");
+        return DefaultHttpClientConfig.builder();
     }
 }
