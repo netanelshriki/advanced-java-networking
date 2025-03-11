@@ -38,14 +38,32 @@ This library implements modern design patterns and best practices to offer a com
 | TCP Client | ✅ Complete | Full Netty-based implementation |
 | HTTP Client Interfaces | ✅ Complete | All interfaces defined |
 | HTTP Client Implementation | ✅ Complete | Full implementation with Java HTTP Client |
-| Annotation Support | ✅ Complete | @HttpClient, @GET, @POST, etc. annotations |
 | Serialization Framework | ✅ Complete | JSON implementation with Jackson |
 | Middleware Framework | ✅ Complete | Interfaces and base classes |
 | Middleware Implementations | ✅ Complete | Logging, retry, rate limiting, resilience middleware |
 | UDP Client | ✅ Complete | Basic implementation available |
 | WebSocket Client | ✅ Complete | Basic implementation available |
-| Extension SPI | ✅ Complete | Service Provider Interfaces for customization |
 | Unit Tests | 🔴 Not Started | To be implemented |
+
+## Documentation
+
+Comprehensive documentation is available in the [docs](docs/) directory:
+
+- [Documentation Index](docs/README.md)
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Class Hierarchy](docs/CLASS_HIERARCHY.md)
+
+### Architecture Diagram
+
+![Architecture Diagram](docs/architecture.svg)
+
+This diagram illustrates the layered architecture of the library, showing how the different components interact. The design follows a clean separation of concerns, allowing for flexibility and modularity.
+
+### Class Hierarchy
+
+![Class Hierarchy Diagram](docs/class-hierarchy.svg)
+
+The class hierarchy diagram shows the inheritance and implementation relationships between the major interfaces and classes in the library. This demonstrates the application of design principles like interface-based design and composition over inheritance.
 
 ## Getting Started
 
@@ -159,123 +177,6 @@ UdpClient client = NetworkLib.createUdpClient()
 
 // Send data (fire and forget)
 client.send(data).execute();
-
-// Or with reply expectation
-byte[] response = client.send(data)
-    .expectReply()
-    .withTimeout(Duration.ofSeconds(5))
-    .execute();
-```
-
-### WebSocket Example
-
-```java
-// Create a WebSocket client
-WebSocketClient client = NetworkLib.createWebSocketClient()
-    .withUrl("wss://example.com/socket")
-    .withConnectionTimeout(Duration.ofSeconds(10))
-    .build();
-
-// Connect and setup handlers
-client.connect();
-client.onMessage(message -> {
-    // Handle incoming message
-    System.out.println("Received: " + message.getTextContent());
-});
-
-// Send text message
-client.sendText("Hello, WebSocket!");
-
-// Send binary message
-client.sendBinary(binaryData);
-```
-
-## Customization and Extension
-
-The library supports extensive customization through SPI (Service Provider Interface) mechanisms:
-
-### Custom Serialization
-
-```java
-// Implement a custom serializer
-public class ProtobufSerializer implements SerializerProvider {
-    @Override
-    public boolean supportsMediaType(String mediaType) {
-        return "application/x-protobuf".equals(mediaType);
-    }
-    
-    @Override
-    public String getMediaType() {
-        return "application/x-protobuf";
-    }
-    
-    // Implement other required methods
-    // ...
-}
-
-// Register manually
-NetworkLib.registerSerializerProvider(new ProtobufSerializer());
-
-// Or register via META-INF/services for automatic loading
-```
-
-### Custom Protocol
-
-```java
-// Implement a custom protocol provider
-public class MqttProtocolProvider implements ProtocolProvider<MqttClient> {
-    @Override
-    public String getProtocolName() {
-        return "mqtt";
-    }
-    
-    // Implement other required methods
-    // ...
-}
-
-// Register manually
-NetworkLib.registerProtocolProvider(new MqttProtocolProvider());
-
-// Or register via META-INF/services for automatic loading
-```
-
-### Custom Middleware
-
-```java
-// Implement a custom middleware provider
-public class LoggingMiddlewareProvider implements MiddlewareProvider {
-    @Override
-    public String getName() {
-        return "logging";
-    }
-    
-    @Override
-    public Class<?> getMiddlewareType() {
-        return LoggingMiddleware.class;
-    }
-    
-    @Override
-    public Object createMiddleware(Object config) {
-        return new LoggingMiddleware();
-    }
-}
-
-// Register manually
-NetworkLib.registerMiddlewareProvider(new LoggingMiddlewareProvider());
-
-// Or register via META-INF/services for automatic loading
-```
-
-## Architecture
-
-The library is designed with a layered architecture:
-
-1. **Core API Layer**: Interfaces defining the networking contracts
-2. **Protocol Implementations**: Concrete implementations for each protocol
-3. **Middleware Layer**: Pluggable components for cross-cutting concerns
-4. **Annotation Layer**: Declarative client definitions
-5. **Extension Layer**: SPI interfaces for custom implementations
-6. **Utility Layer**: Support classes and helpers
 
 ## Contributing
 

@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="800" viewBox="0 0 1200 800">
+  <style>
+    text {
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .interface-box {
+      fill: #e6f3ff;
+      stroke: #6baed6;
+      stroke-width: 2;
+    }
+    .abstract-box {
+      fill: #fff7e6;
+      stroke: #fd8d3c;
+      stroke-width: 2;
+    }
+    .class-box {
+      fill: #e6ffe6;
+      stroke: #74c476;
+      stroke-width: 2;
+    }
+    .arrow {
+      stroke: #636363;
+      stroke-width: 2;
+      fill: none;
+      marker-end: url(#arrow);
+    }
+    .dashed-arrow {
+      stroke: #636363;
+      stroke-width: 2;
+      fill: none;
+      stroke-dasharray: 5, 5;
+      marker-end: url(#arrow);
+    }
+    .module-box {
+      fill: #f8f8f8;
+      stroke: #bdbdbd;
+      stroke-width: 1;
+      stroke-dasharray: 5, 5;
+    }
+    .module-title {
+      font-size: 16px;
+      font-style: italic;
+    }
+  </style>
+  
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+        markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#636363"/>
+    </marker>
+  </defs>
+  
+  <rect x="10" y="10" width="1180" height="780" fill="white" stroke="#e0e0e0" stroke-width="1"/>
+  
+  <text x="600" y="40" text-anchor="middle" class="title">Advanced Java Networking Library - Class Hierarchy</text>
+
+  <!-- Core API Layer -->
+  <rect x="20" y="60" width="1160" height="220" class="module-box"/>
+  <text x="600" y="80" text-anchor="middle" class="module-title">Core API Layer</text>
+  
+  <!-- NetworkClient Interface -->
+  <rect x="480" y="100" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="580" y="130" text-anchor="middle">NetworkClient</text>
+  
+  <!-- Connection Interface -->
+  <rect x="780" y="100" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="880" y="130" text-anchor="middle">Connection</text>
+  
+  <!-- Protocol-specific interfaces -->
+  <rect x="180" y="200" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="280" y="230" text-anchor="middle">HttpClient</text>
+  
+  <rect x="430" y="200" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="530" y="230" text-anchor="middle">TcpClient</text>
+  
+  <rect x="680" y="200" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="780" y="230" text-anchor="middle">UdpClient</text>
+  
+  <rect x="930" y="200" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="1030" y="230" text-anchor="middle">WebSocketClient</text>
+  
+  <!-- Inheritance arrows -->
+  <path d="M 280 200 L 530 160 L 780 200" class="arrow"/>
+  <path d="M 530 200 L 580 150" class="arrow"/>
+  <path d="M 780 200 L 580 150" class="arrow"/>
+  <path d="M 1030 200 L 580 150" class="arrow"/>
+  
+  <!-- Implementation Layer -->
+  <rect x="20" y="300" width="1160" height="220" class="module-box"/>
+  <text x="600" y="320" text-anchor="middle" class="module-title">Implementation Layer</text>
+  
+  <!-- Abstract classes -->
+  <rect x="180" y="350" width="200" height="50" rx="5" ry="5" class="abstract-box"/>
+  <text x="280" y="380" text-anchor="middle">AbstractHttpClient</text>
+  
+  <rect x="430" y="350" width="200" height="50" rx="5" ry="5" class="abstract-box"/>
+  <text x="530" y="380" text-anchor="middle">AbstractTcpClient</text>
+  
+  <rect x="680" y="350" width="200" height="50" rx="5" ry="5" class="abstract-box"/>
+  <text x="780" y="380" text-anchor="middle">AbstractUdpClient</text>
+  
+  <rect x="930" y="350" width="200" height="50" rx="5" ry="5" class="abstract-box"/>
+  <text x="1030" y="380" text-anchor="middle">AbstractWebSocketClient</text>
+  
+  <!-- Concrete implementations -->
+  <rect x="180" y="450" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="280" y="480" text-anchor="middle">DefaultHttpClient</text>
+  
+  <rect x="430" y="450" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="530" y="480" text-anchor="middle">NettyTcpClient</text>
+  
+  <rect x="680" y="450" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="780" y="480" text-anchor="middle">DefaultUdpClient</text>
+  
+  <rect x="930" y="450" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="1030" y="480" text-anchor="middle">NettyWebSocketClient</text>
+  
+  <!-- Implementation inheritance arrows -->
+  <path d="M 280 350 L 280 250" class="arrow"/>
+  <path d="M 530 350 L 530 250" class="arrow"/>
+  <path d="M 780 350 L 780 250" class="arrow"/>
+  <path d="M 1030 350 L 1030 250" class="arrow"/>
+  
+  <path d="M 280 450 L 280 400" class="arrow"/>
+  <path d="M 530 450 L 530 400" class="arrow"/>
+  <path d="M 780 450 L 780 400" class="arrow"/>
+  <path d="M 1030 450 L 1030 400" class="arrow"/>
+  
+  <!-- Middleware Layer -->
+  <rect x="20" y="540" width="1160" height="120" class="module-box"/>
+  <text x="600" y="560" text-anchor="middle" class="module-title">Middleware Layer</text>
+  
+  <rect x="180" y="580" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="280" y="610" text-anchor="middle">HttpMiddleware</text>
+  
+  <rect x="430" y="580" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="530" y="610" text-anchor="middle">RetryMiddleware</text>
+  
+  <rect x="680" y="580" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="780" y="610" text-anchor="middle">RateLimitMiddleware</text>
+  
+  <rect x="930" y="580" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="1030" y="610" text-anchor="middle">CircuitBreakerMiddleware</text>
+  
+  <!-- Middleware relationship -->
+  <path d="M 530 580 L 380 610" class="dashed-arrow"/>
+  <path d="M 780 580 L 380 610" class="dashed-arrow"/>
+  <path d="M 1030 580 L 380 610" class="dashed-arrow"/>
+  
+  <path d="M 280 510 L 280 580" class="dashed-arrow"/>
+  
+  <!-- Serialization Layer -->
+  <rect x="20" y="680" width="1160" height="100" class="module-box"/>
+  <text x="600" y="700" text-anchor="middle" class="module-title">Serialization &amp; Utility Layer</text>
+  
+  <rect x="180" y="720" width="200" height="50" rx="5" ry="5" class="interface-box"/>
+  <text x="280" y="750" text-anchor="middle">Serializer</text>
+  
+  <rect x="430" y="720" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="530" y="750" text-anchor="middle">JsonSerializer</text>
+  
+  <rect x="680" y="720" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="780" y="750" text-anchor="middle">ProtobufSerializer</text>
+  
+  <rect x="930" y="720" width="200" height="50" rx="5" ry="5" class="class-box"/>
+  <text x="1030" y="750" text-anchor="middle">Utilities</text>
+  
+  <!-- Serialization relationship -->
+  <path d="M 530 720 L 380 750" class="arrow"/>
+  <path d="M 780 720 L 380 750" class="arrow"/>
+  
+  <path d="M 280 500 L 280 720" class="dashed-arrow"/>
+</svg>
