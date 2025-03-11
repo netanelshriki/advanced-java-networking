@@ -10,6 +10,7 @@ import com.network.api.websocket.WebSocketClient;
 import com.network.api.websocket.WebSocketClientBuilder;
 import com.network.impl.http.DefaultHttpClientConfig;
 import com.network.impl.tcp.DefaultTcpClientConfig;
+import com.network.impl.udp.DefaultUdpClientConfig;
 
 /**
  * Factory class for creating network clients.
@@ -48,7 +49,7 @@ public final class NetworkLib {
      * @return a new UDP client builder
      */
     public static UdpClientBuilder createUdpClient() {
-        return UdpClient.builder();
+        return DefaultUdpClientConfig.builder();
     }
     
     /**
