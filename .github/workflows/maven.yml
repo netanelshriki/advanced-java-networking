@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  compile-check:
+  compilation-check:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -21,23 +21,91 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Display compilation errors
-      continue-on-error: true
-      run: mvn -B compile
-
-    - name: Test if compilation succeeded
-      id: check-compilation
+    - name: Count main code files
+      id: count-files
       run: |
-        if mvn -B clean compile -DskipTests; then
+        SRC_FILES=$(find src/main -name "*.java" | wc -l)
+        echo "src_files=$SRC_FILES" >> $GITHUB_OUTPUT
+        echo "Total main source files: $SRC_FILES"
+    
+    - name: Attempt main code compilation
+      id: compile-main
+      continue-on-error: true
+      run: |
+        mvn -B clean compile -DskipTests > compile_output.txt 2>&1
+        if [ $? -eq 0 ]; then
           echo "compilation=success" >> $GITHUB_OUTPUT
+          echo "✅ Main code compilation successful!"
         else
           echo "compilation=failure" >> $GITHUB_OUTPUT
+          echo "❌ Main code compilation failed"
+          ERROR_COUNT=$(grep -c "ERROR" compile_output.txt || echo "0")
+          echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
+          echo "Found $ERROR_COUNT compilation errors"
         fi
+    
+    - name: Analyze compilation errors
+      if: steps.compile-main.outputs.compilation == 'failure'
+      run: |
+        echo "## Compilation Error Summary" > error_summary.md
+        echo "" >> error_summary.md
+        echo "Found **${{ steps.compile-main.outputs.error_count }}** compilation errors." >> error_summary.md
+        echo "" >> error_summary.md
+        
+        # Extract top error categories
+        echo "### Top Error Categories:" >> error_summary.md
+        echo "" >> error_summary.md
+        
+        # Count "cannot find symbol" errors
+        MISSING_SYMBOLS=$(grep -c "cannot find symbol" compile_output.txt || echo "0")
+        echo "- **Missing symbols/classes**: $MISSING_SYMBOLS errors" >> error_summary.md
+        
+        # Count method override issues
+        METHOD_OVERRIDE=$(grep -c "method does not override" compile_output.txt || echo "0")
+        echo "- **Method override issues**: $METHOD_OVERRIDE errors" >> error_summary.md
+        
+        # Count return type issues
+        RETURN_TYPE=$(grep -c "return type" compile_output.txt || echo "0")
+        echo "- **Return type conflicts**: $RETURN_TYPE errors" >> error_summary.md
+        
+        # Count parameter type issues
+        PARAM_TYPE=$(grep -c "argument mismatch" compile_output.txt || echo "0")
+        echo "- **Parameter type issues**: $PARAM_TYPE errors" >> error_summary.md
+        
+        # Count method already defined issues
+        METHOD_DUPS=$(grep -c "already defined" compile_output.txt || echo "0")
+        echo "- **Duplicate method definitions**: $METHOD_DUPS errors" >> error_summary.md
+        
+        echo "" >> error_summary.md
+        echo "See Issue #9 for detailed breakdown of compilation errors." >> error_summary.md
+        
+        cat error_summary.md
+    
+    - name: Create compilation summary
+      if: always()
+      run: |
+        if [[ "${{ steps.compile-main.outputs.compilation }}" == "success" ]]; then
+          echo "## ✅ Compilation Successful!" > status.md
+          echo "" >> status.md
+          echo "Successfully compiled ${{ steps.count-files.outputs.src_files }} source files." >> status.md
+        else  
+          echo "## ❌ Compilation Failed" > status.md
+          echo "" >> status.md
+          cat error_summary.md >> status.md
+        fi
+        
+        cat status.md
+    
+    - name: Upload error details
+      if: steps.compile-main.outputs.compilation == 'failure'
+      uses: actions/upload-artifact@v4
+      with:
+        name: compilation-errors
+        path: compile_output.txt
 
-  test-only:
+  test-compilation-check:
     runs-on: ubuntu-latest
-    needs: compile-check
-    # Always run, even if compilation fails
+    needs: compilation-check
     if: always()
     
     steps:
@@ -49,24 +117,57 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
         cache: maven
+        
+    - name: Count test files
+      id: count-test-files
+      run: |
+        TEST_FILES=$(find src/test -name "*.java" 2>/dev/null | wc -l)
+        echo "test_files=$TEST_FILES" >> $GITHUB_OUTPUT
+        echo "Total test files: $TEST_FILES"
     
-    - name: Compile tests only
+    - name: Attempt test compilation
+      id: compile-tests
       continue-on-error: true
-      run: mvn -B test-compile -Dmaven.main.skip=true
-      
-    - name: Check if tests compile
-      id: test-compilation
       run: |
-        if mvn -B test-compile -Dmaven.main.skip=true; then
-          echo "tests_compile=true" >> $GITHUB_OUTPUT
+        if [ "${{ steps.count-test-files.outputs.test_files }}" == "0" ]; then
+          echo "tests_compile=no_tests" >> $GITHUB_OUTPUT
+          echo "❓ No test files found"
         else
-          echo "tests_compile=false" >> $GITHUB_OUTPUT
+          mvn -B test-compile -Dmaven.main.skip=true > test_compile_output.txt 2>&1
+          if [ $? -eq 0 ]; then
+            echo "tests_compile=success" >> $GITHUB_OUTPUT
+            echo "✅ Test compilation successful!"
+          else
+            echo "tests_compile=failure" >> $GITHUB_OUTPUT
+            echo "❌ Test compilation failed"
+            TEST_ERROR_COUNT=$(grep -c "ERROR" test_compile_output.txt || echo "0")
+            echo "error_count=$TEST_ERROR_COUNT" >> $GITHUB_OUTPUT
+            echo "Found $TEST_ERROR_COUNT test compilation errors"
+          fi
         fi
-
-    - name: Report Status
+    
+    - name: Create test compilation summary
+      if: always()
       run: |
-        if [[ "${{ steps.test-compilation.outputs.tests_compile }}" == "true" ]]; then
-          echo "✅ Test compilation successful! Main code issues need to be fixed (see Issue #9)"
+        if [[ "${{ steps.compile-tests.outputs.tests_compile }}" == "success" ]]; then
+          echo "## ✅ Test Compilation Successful!" > test_status.md
+          echo "" >> test_status.md
+          echo "Successfully compiled ${{ steps.count-test-files.outputs.test_files }} test files." >> test_status.md
+        elif [[ "${{ steps.compile-tests.outputs.tests_compile }}" == "no_tests" ]]; then
+          echo "## ⚠️ No Tests Found" > test_status.md
+          echo "" >> test_status.md
+          echo "No test files were found in the src/test directory." >> test_status.md
         else
-          echo "❌ Tests also have compilation issues that need to be fixed"
+          echo "## ❌ Test Compilation Failed" > test_status.md
+          echo "" >> test_status.md
+          echo "Found **${{ steps.compile-tests.outputs.error_count }}** test compilation errors." >> test_status.md
         fi
+        
+        cat test_status.md
+    
+    - name: Upload test error details
+      if: steps.compile-tests.outputs.tests_compile == 'failure'
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-compilation-errors
+        path: test_compile_output.txt
