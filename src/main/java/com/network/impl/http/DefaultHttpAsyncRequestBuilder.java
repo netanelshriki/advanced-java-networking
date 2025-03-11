@@ -1,12 +1,10 @@
 package com.network.impl.http;
 
+import com.network.api.http.HttpAsyncRequestBuilder;
 import com.network.api.http.HttpClient;
 import com.network.api.http.HttpMethod;
-import com.network.api.http.HttpRequest;
-import com.network.api.http.HttpRequestBuilder;
 import com.network.api.http.HttpResponse;
-import com.network.api.http.TypedHttpRequestBuilder;
-import com.network.exception.NetworkException;
+import com.network.api.http.TypedHttpAsyncRequestBuilder;
 import com.network.serialization.Serializer;
 
 import java.net.URI;
@@ -14,11 +12,12 @@ import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * Default implementation of the {@link HttpRequestBuilder} interface.
+ * Default implementation of the {@link HttpAsyncRequestBuilder} interface.
  */
-public class DefaultHttpRequestBuilder implements HttpRequestBuilder {
+public class DefaultHttpAsyncRequestBuilder implements HttpAsyncRequestBuilder {
 
     private final HttpClient client;
     private String path;
@@ -30,11 +29,11 @@ public class DefaultHttpRequestBuilder implements HttpRequestBuilder {
     private Duration timeout;
     
     /**
-     * Creates a new DefaultHttpRequestBuilder.
+     * Creates a new DefaultHttpAsyncRequestBuilder.
      * 
      * @param client the HTTP client
      */
-    DefaultHttpRequestBuilder(HttpClient client) {
+    DefaultHttpAsyncRequestBuilder(HttpClient client) {
         this.client = client;
         
         // Copy default headers from client
@@ -42,73 +41,73 @@ public class DefaultHttpRequestBuilder implements HttpRequestBuilder {
     }
 
     @Override
-    public HttpRequestBuilder path(String path) {
+    public HttpAsyncRequestBuilder path(String path) {
         this.path = path;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder queryParam(String name, String value) {
+    public HttpAsyncRequestBuilder queryParam(String name, String value) {
         queryParams.put(name, value);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder queryParams(Map<String, String> params) {
+    public HttpAsyncRequestBuilder queryParams(Map<String, String> params) {
         queryParams.putAll(params);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder pathParam(String name, String value) {
+    public HttpAsyncRequestBuilder pathParam(String name, String value) {
         pathParams.put(name, value);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder pathParams(Map<String, String> params) {
+    public HttpAsyncRequestBuilder pathParams(Map<String, String> params) {
         pathParams.putAll(params);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder header(String name, String value) {
+    public HttpAsyncRequestBuilder header(String name, String value) {
         headers.put(name, value);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder headers(Map<String, String> headers) {
+    public HttpAsyncRequestBuilder headers(Map<String, String> headers) {
         this.headers.putAll(headers);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder contentType(String contentType) {
+    public HttpAsyncRequestBuilder contentType(String contentType) {
         headers.put("Content-Type", contentType);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder accept(String accept) {
+    public HttpAsyncRequestBuilder accept(String accept) {
         headers.put("Accept", accept);
         return this;
     }
 
     @Override
-    public HttpRequestBuilder body(byte[] body) {
+    public HttpAsyncRequestBuilder body(byte[] body) {
         this.body = body;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder body(String body) {
+    public HttpAsyncRequestBuilder body(String body) {
         this.body = body.getBytes();
         return this;
     }
 
     @Override
-    public <T> HttpRequestBuilder body(T body, Class<T> bodyClass) {
+    public <T> HttpAsyncRequestBuilder body(T body, Class<T> bodyClass) {
         if (body == null) {
             this.body = null;
             return this;
@@ -131,61 +130,62 @@ public class DefaultHttpRequestBuilder implements HttpRequestBuilder {
     }
 
     @Override
-    public HttpRequestBuilder timeout(Duration timeout) {
+    public HttpAsyncRequestBuilder timeout(Duration timeout) {
         this.timeout = timeout;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder get() {
+    public HttpAsyncRequestBuilder get() {
         this.method = HttpMethod.GET;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder post() {
+    public HttpAsyncRequestBuilder post() {
         this.method = HttpMethod.POST;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder put() {
+    public HttpAsyncRequestBuilder put() {
         this.method = HttpMethod.PUT;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder delete() {
+    public HttpAsyncRequestBuilder delete() {
         this.method = HttpMethod.DELETE;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder patch() {
+    public HttpAsyncRequestBuilder patch() {
         this.method = HttpMethod.PATCH;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder head() {
+    public HttpAsyncRequestBuilder head() {
         this.method = HttpMethod.HEAD;
         return this;
     }
 
     @Override
-    public HttpRequestBuilder options() {
+    public HttpAsyncRequestBuilder options() {
         this.method = HttpMethod.OPTIONS;
         return this;
     }
 
     @Override
-    public <T> TypedHttpRequestBuilder<T> deserializeAs(Class<T> responseType) {
-        return new DefaultTypedHttpRequestBuilder<>(this, responseType);
+    public <T> TypedHttpAsyncRequestBuilder<T> deserializeAs(Class<T> responseType) {
+        return new DefaultTypedHttpAsyncRequestBuilder<>(this, responseType);
     }
 
     @Override
-    public HttpResponse execute() throws NetworkException {
-        return client.send(build());
+    public CompletableFuture<HttpResponse> execute() {
+        DefaultHttpRequest request = build();
+        return client.sendAsync(request);
     }
 
     /**
@@ -193,7 +193,7 @@ public class DefaultHttpRequestBuilder implements HttpRequestBuilder {
      * 
      * @return a new HTTP request
      */
-    HttpRequest build() {
+    DefaultHttpRequest build() {
         if (method == null) {
             throw new IllegalStateException("HTTP method not set");
         }
