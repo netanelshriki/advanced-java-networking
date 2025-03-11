@@ -10,6 +10,7 @@ This library implements modern design patterns and best practices to offer a com
 
 - **Multi-protocol support**: HTTP, WebSockets, TCP, and UDP
 - **Fluent API design**: Intuitive builder patterns for easy configuration
+- **Annotation-based clients**: Declarative HTTP client interfaces
 - **Resilience patterns**: Circuit breakers, retry mechanisms, timeouts, backoff strategies
 - **Async operations**: Non-blocking I/O with CompletableFuture
 - **Middleware architecture**: Extensible request/response processing pipeline
@@ -18,6 +19,7 @@ This library implements modern design patterns and best practices to offer a com
 - **Secure by default**: TLS/SSL integration, robust authentication
 - **Efficient resource management**: Connection pooling, keepalives
 - **Serialization framework**: Pluggable formats (JSON, Protocol Buffers, etc.)
+- **Extensibility**: SPI interfaces for custom protocol and serialization providers
 
 ## Design Principles
 
@@ -108,6 +110,40 @@ CompletableFuture<HttpResponse<User>> future = client.requestAsync()
     .execute();
 ```
 
+### Annotation-Based HTTP Client Example
+
+```java
+// Define your API interface with annotations
+@HttpClient(baseUrl = "https://api.example.com")
+@DefaultHeaders({
+    @HeaderDef(name = "Accept", value = "application/json"),
+    @HeaderDef(name = "User-Agent", value = "AdvancedNetworking/1.0")
+})
+public interface UserService {
+    @GET("/users/{id}")
+    @CircuitBreaker(failureThreshold = 3, resetTimeout = 30000)
+    User getUserById(@PathVariable("id") String id);
+    
+    @POST("/users")
+    @Retry(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
+    User createUser(@Body User user);
+    
+    @PUT("/users/{id}")
+    User updateUser(@PathVariable("id") String id, @Body User user);
+    
+    @DELETE("/users/{id}")
+    void deleteUser(@PathVariable("id") String id, @RequestParam("authToken") String token);
+}
+
+// Create an implementation of the interface
+UserService userService = NetworkLib.createClient(UserService.class);
+
+// Use the client
+User user = userService.getUserById("123");
+User newUser = userService.createUser(new User("John Doe", "john@example.com"));
+userService.deleteUser("123", "auth-token-123");
+```
+
 ### TCP Socket Example
 
 ```java
@@ -141,36 +177,6 @@ UdpClient client = NetworkLib.createUdpClient()
 
 // Send data (fire and forget)
 client.send(data).execute();
-
-// Or with reply expectation
-byte[] response = client.send(data)
-    .expectReply()
-    .withTimeout(Duration.ofSeconds(5))
-    .execute();
-```
-
-### WebSocket Example
-
-```java
-// Create a WebSocket client
-WebSocketClient client = NetworkLib.createWebSocketClient()
-    .withUrl("wss://example.com/socket")
-    .withConnectionTimeout(Duration.ofSeconds(10))
-    .build();
-
-// Connect and setup handlers
-client.connect();
-client.onMessage(message -> {
-    // Handle incoming message
-    System.out.println("Received: " + message.getTextContent());
-});
-
-// Send text message
-client.sendText("Hello, WebSocket!");
-
-// Send binary message
-client.sendBinary(binaryData);
-```
 
 ## Contributing
 
