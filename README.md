@@ -10,6 +10,7 @@ This library implements modern design patterns and best practices to offer a com
 
 - **Multi-protocol support**: HTTP, WebSockets, TCP, and UDP
 - **Fluent API design**: Intuitive builder patterns for easy configuration
+- **Annotation-based clients**: Declarative HTTP client interfaces
 - **Resilience patterns**: Circuit breakers, retry mechanisms, timeouts, backoff strategies
 - **Async operations**: Non-blocking I/O with CompletableFuture
 - **Middleware architecture**: Extensible request/response processing pipeline
@@ -18,6 +19,7 @@ This library implements modern design patterns and best practices to offer a com
 - **Secure by default**: TLS/SSL integration, robust authentication
 - **Efficient resource management**: Connection pooling, keepalives
 - **Serialization framework**: Pluggable formats (JSON, Protocol Buffers, etc.)
+- **Extensibility**: SPI interfaces for custom protocol and serialization providers
 
 ## Design Principles
 
@@ -36,11 +38,13 @@ This library implements modern design patterns and best practices to offer a com
 | TCP Client | ✅ Complete | Full Netty-based implementation |
 | HTTP Client Interfaces | ✅ Complete | All interfaces defined |
 | HTTP Client Implementation | ✅ Complete | Full implementation with Java HTTP Client |
+| Annotation Support | ✅ Complete | @HttpClient, @GET, @POST, etc. annotations |
 | Serialization Framework | ✅ Complete | JSON implementation with Jackson |
 | Middleware Framework | ✅ Complete | Interfaces and base classes |
 | Middleware Implementations | ✅ Complete | Logging, retry, rate limiting, resilience middleware |
 | UDP Client | ✅ Complete | Basic implementation available |
 | WebSocket Client | ✅ Complete | Basic implementation available |
+| Extension SPI | ✅ Complete | Service Provider Interfaces for customization |
 | Unit Tests | 🔴 Not Started | To be implemented |
 
 ## Getting Started
@@ -86,6 +90,40 @@ CompletableFuture<HttpResponse<User>> future = client.requestAsync()
     .body(new User("John", "Doe"))
     .deserializeAs(User.class)
     .execute();
+```
+
+### Annotation-Based HTTP Client Example
+
+```java
+// Define your API interface with annotations
+@HttpClient(baseUrl = "https://api.example.com")
+@DefaultHeaders({
+    @HeaderDef(name = "Accept", value = "application/json"),
+    @HeaderDef(name = "User-Agent", value = "AdvancedNetworking/1.0")
+})
+public interface UserService {
+    @GET("/users/{id}")
+    @CircuitBreaker(failureThreshold = 3, resetTimeout = 30000)
+    User getUserById(@PathVariable("id") String id);
+    
+    @POST("/users")
+    @Retry(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
+    User createUser(@Body User user);
+    
+    @PUT("/users/{id}")
+    User updateUser(@PathVariable("id") String id, @Body User user);
+    
+    @DELETE("/users/{id}")
+    void deleteUser(@PathVariable("id") String id, @RequestParam("authToken") String token);
+}
+
+// Create an implementation of the interface
+UserService userService = NetworkLib.createClient(UserService.class);
+
+// Use the client
+User user = userService.getUserById("123");
+User newUser = userService.createUser(new User("John Doe", "john@example.com"));
+userService.deleteUser("123", "auth-token-123");
 ```
 
 ### TCP Socket Example
@@ -152,6 +190,82 @@ client.sendText("Hello, WebSocket!");
 client.sendBinary(binaryData);
 ```
 
+## Customization and Extension
+
+The library supports extensive customization through SPI (Service Provider Interface) mechanisms:
+
+### Custom Serialization
+
+```java
+// Implement a custom serializer
+public class ProtobufSerializer implements SerializerProvider {
+    @Override
+    public boolean supportsMediaType(String mediaType) {
+        return "application/x-protobuf".equals(mediaType);
+    }
+    
+    @Override
+    public String getMediaType() {
+        return "application/x-protobuf";
+    }
+    
+    // Implement other required methods
+    // ...
+}
+
+// Register manually
+NetworkLib.registerSerializerProvider(new ProtobufSerializer());
+
+// Or register via META-INF/services for automatic loading
+```
+
+### Custom Protocol
+
+```java
+// Implement a custom protocol provider
+public class MqttProtocolProvider implements ProtocolProvider<MqttClient> {
+    @Override
+    public String getProtocolName() {
+        return "mqtt";
+    }
+    
+    // Implement other required methods
+    // ...
+}
+
+// Register manually
+NetworkLib.registerProtocolProvider(new MqttProtocolProvider());
+
+// Or register via META-INF/services for automatic loading
+```
+
+### Custom Middleware
+
+```java
+// Implement a custom middleware provider
+public class LoggingMiddlewareProvider implements MiddlewareProvider {
+    @Override
+    public String getName() {
+        return "logging";
+    }
+    
+    @Override
+    public Class<?> getMiddlewareType() {
+        return LoggingMiddleware.class;
+    }
+    
+    @Override
+    public Object createMiddleware(Object config) {
+        return new LoggingMiddleware();
+    }
+}
+
+// Register manually
+NetworkLib.registerMiddlewareProvider(new LoggingMiddlewareProvider());
+
+// Or register via META-INF/services for automatic loading
+```
+
 ## Architecture
 
 The library is designed with a layered architecture:
@@ -159,7 +273,9 @@ The library is designed with a layered architecture:
 1. **Core API Layer**: Interfaces defining the networking contracts
 2. **Protocol Implementations**: Concrete implementations for each protocol
 3. **Middleware Layer**: Pluggable components for cross-cutting concerns
-4. **Utility Layer**: Support classes and helpers
+4. **Annotation Layer**: Declarative client definitions
+5. **Extension Layer**: SPI interfaces for custom implementations
+6. **Utility Layer**: Support classes and helpers
 
 ## Contributing
 
