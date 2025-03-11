@@ -5,6 +5,8 @@ import com.network.api.connection.ConnectionListener;
 import com.network.api.http.*;
 import com.network.api.http.middleware.HttpMiddleware;
 import com.network.exception.NetworkException;
+import com.network.middleware.http.CachingMiddleware;
+import com.network.middleware.http.RetryMiddleware;
 import com.network.serialization.Serializer;
 
 import java.net.URL;
@@ -17,6 +19,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Default implementation of the {@link HttpClient} interface.
@@ -26,6 +30,8 @@ import java.util.function.Consumer;
  */
 public class DefaultHttpClient implements HttpClient {
 
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultHttpClient.class);
+    
     private final java.net.http.HttpClient httpClient;
     private final HttpClientConfig config;
     private final URL baseUrl;
@@ -100,6 +106,24 @@ public class DefaultHttpClient implements HttpClient {
     @Override
     public HttpResponse send(HttpRequest request) throws NetworkException {
         try {
+            // Create context for middleware
+            HttpRequestContext context = new DefaultHttpRequestContext(request, this);
+            
+            // Apply request middleware
+            try {
+                for (HttpMiddleware middleware : middlewares) {
+                    middleware.beforeRequest(context);
+                }
+            } catch (CachingMiddleware.CacheHitException e) {
+                // Cache hit, return cached response
+                LOG.debug("Cache hit, returning cached response");
+                return e.getCachedResponse();
+            } catch (RetryMiddleware.RetryException e) {
+                // This shouldn't happen in beforeRequest, but just in case
+                LOG.warn("Unexpected RetryException in beforeRequest", e);
+                throw new NetworkException("Unexpected retry", e);
+            }
+            
             // Build Java HTTP request
             java.net.http.HttpRequest.Builder requestBuilder = java.net.http.HttpRequest.newBuilder()
                     .uri(request.getUri());
@@ -155,42 +179,102 @@ public class DefaultHttpClient implements HttpClient {
                 requestBuilder.timeout(config.getRequestTimeout());
             }
             
-            // Create context for middleware
-            HttpRequestContext context = new DefaultHttpRequestContext(request, this);
+            HttpResponse response = null;
+            int retryCount = 0;
+            final int MAX_RETRIES = 5; // Safeguard against infinite loops
             
-            // Apply request middleware
-            for (HttpMiddleware middleware : middlewares) {
-                middleware.beforeRequest(context);
+            while (response == null && retryCount < MAX_RETRIES) {
+                try {
+                    // Send request
+                    java.net.http.HttpResponse<byte[]> javaResponse = httpClient.send(
+                            requestBuilder.build(),
+                            java.net.http.HttpResponse.BodyHandlers.ofByteArray()
+                    );
+                    
+                    // Create response
+                    DefaultHttpResponse httpResponse = new DefaultHttpResponse(
+                            javaResponse.statusCode(),
+                            javaResponse.body(),
+                            convertHeaders(javaResponse.headers().map()),
+                            javaResponse.uri(),
+                            request
+                    );
+                    
+                    // Apply response middleware in reverse order
+                    try {
+                        for (int i = middlewares.size() - 1; i >= 0; i--) {
+                            middlewares.get(i).afterResponse(context, httpResponse);
+                        }
+                        response = httpResponse;
+                    } catch (RetryMiddleware.RetryException e) {
+                        // Middleware requested a retry
+                        LOG.debug("Retry requested by middleware, attempt {}", retryCount + 1);
+                        retryCount++;
+                        // Continue loop to retry
+                    }
+                } catch (Exception e) {
+                    // Store exception in context for middleware to use
+                    context.setAttribute("exception", e);
+                    
+                    // Create a dummy response for middleware
+                    DefaultHttpResponse errorResponse = new DefaultHttpResponse(
+                            500, // Internal Server Error
+                            null,
+                            Collections.emptyMap(),
+                            request.getUri(),
+                            request
+                    );
+                    
+                    // Apply response middleware to see if we should retry
+                    try {
+                        for (int i = middlewares.size() - 1; i >= 0; i--) {
+                            middlewares.get(i).afterResponse(context, errorResponse);
+                        }
+                        // If we get here, no middleware requested a retry
+                        throw new NetworkException("Failed to send HTTP request", e);
+                    } catch (RetryMiddleware.RetryException re) {
+                        // Middleware requested a retry
+                        LOG.debug("Retry requested after exception, attempt {}", retryCount + 1);
+                        retryCount++;
+                        // Continue loop to retry
+                    }
+                }
             }
             
-            // Send request
-            java.net.http.HttpResponse<byte[]> response = httpClient.send(
-                    requestBuilder.build(),
-                    java.net.http.HttpResponse.BodyHandlers.ofByteArray()
-            );
-            
-            // Create response
-            DefaultHttpResponse httpResponse = new DefaultHttpResponse(
-                    response.statusCode(),
-                    response.body(),
-                    convertHeaders(response.headers().map()),
-                    response.uri(),
-                    request
-            );
-            
-            // Apply response middleware in reverse order
-            for (int i = middlewares.size() - 1; i >= 0; i--) {
-                middlewares.get(i).afterResponse(context, httpResponse);
+            if (response == null) {
+                throw new NetworkException("Failed to send HTTP request after " + retryCount + " retries");
             }
             
-            return httpResponse;
+            return response;
         } catch (Exception e) {
+            if (e instanceof NetworkException) {
+                throw (NetworkException) e;
+            }
             throw new NetworkException("Failed to send HTTP request", e);
         }
     }
     
     @Override
     public CompletableFuture<HttpResponse> sendAsync(HttpRequest request) {
+        CompletableFuture<HttpResponse> futureResponse = new CompletableFuture<>();
+        
+        // Create context for middleware
+        HttpRequestContext context = new DefaultHttpRequestContext(request, this);
+        
+        // Apply request middleware
+        try {
+            for (HttpMiddleware middleware : middlewares) {
+                middleware.beforeRequest(context);
+            }
+        } catch (CachingMiddleware.CacheHitException e) {
+            // Cache hit, return cached response
+            LOG.debug("Cache hit, returning cached response");
+            return CompletableFuture.completedFuture(e.getCachedResponse());
+        } catch (Exception e) {
+            futureResponse.completeExceptionally(e);
+            return futureResponse;
+        }
+        
         // Build Java HTTP request
         java.net.http.HttpRequest.Builder requestBuilder = java.net.http.HttpRequest.newBuilder()
                 .uri(request.getUri());
@@ -201,44 +285,49 @@ public class DefaultHttpClient implements HttpClient {
         }
         
         // Set method and body
-        switch (request.getMethod()) {
-            case GET:
-                requestBuilder.GET();
-                break;
-            case POST:
-                if (request.getBody() != null) {
-                    requestBuilder.POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.getBody()));
-                } else {
-                    requestBuilder.POST(java.net.http.HttpRequest.BodyPublishers.noBody());
-                }
-                break;
-            case PUT:
-                if (request.getBody() != null) {
-                    requestBuilder.PUT(java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.getBody()));
-                } else {
-                    requestBuilder.PUT(java.net.http.HttpRequest.BodyPublishers.noBody());
-                }
-                break;
-            case DELETE:
-                requestBuilder.DELETE();
-                break;
-            case PATCH:
-                if (request.getBody() != null) {
-                    requestBuilder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.getBody()));
-                } else {
-                    requestBuilder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.noBody());
-                }
-                break;
-            case HEAD:
-                requestBuilder.method("HEAD", java.net.http.HttpRequest.BodyPublishers.noBody());
-                break;
-            case OPTIONS:
-                requestBuilder.method("OPTIONS", java.net.http.HttpRequest.BodyPublishers.noBody());
-                break;
-            default:
-                CompletableFuture<HttpResponse> failedFuture = new CompletableFuture<>();
-                failedFuture.completeExceptionally(new IllegalArgumentException("Unsupported HTTP method: " + request.getMethod()));
-                return failedFuture;
+        try {
+            switch (request.getMethod()) {
+                case GET:
+                    requestBuilder.GET();
+                    break;
+                case POST:
+                    if (request.getBody() != null) {
+                        requestBuilder.POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.getBody()));
+                    } else {
+                        requestBuilder.POST(java.net.http.HttpRequest.BodyPublishers.noBody());
+                    }
+                    break;
+                case PUT:
+                    if (request.getBody() != null) {
+                        requestBuilder.PUT(java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.getBody()));
+                    } else {
+                        requestBuilder.PUT(java.net.http.HttpRequest.BodyPublishers.noBody());
+                    }
+                    break;
+                case DELETE:
+                    requestBuilder.DELETE();
+                    break;
+                case PATCH:
+                    if (request.getBody() != null) {
+                        requestBuilder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.getBody()));
+                    } else {
+                        requestBuilder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.noBody());
+                    }
+                    break;
+                case HEAD:
+                    requestBuilder.method("HEAD", java.net.http.HttpRequest.BodyPublishers.noBody());
+                    break;
+                case OPTIONS:
+                    requestBuilder.method("OPTIONS", java.net.http.HttpRequest.BodyPublishers.noBody());
+                    break;
+                default:
+                    futureResponse.completeExceptionally(
+                            new IllegalArgumentException("Unsupported HTTP method: " + request.getMethod()));
+                    return futureResponse;
+            }
+        } catch (Exception e) {
+            futureResponse.completeExceptionally(e);
+            return futureResponse;
         }
         
         // Set timeout
@@ -248,37 +337,77 @@ public class DefaultHttpClient implements HttpClient {
             requestBuilder.timeout(config.getRequestTimeout());
         }
         
-        // Create context for middleware
-        HttpRequestContext context = new DefaultHttpRequestContext(request, this);
-        
-        // Apply request middleware
-        for (HttpMiddleware middleware : middlewares) {
-            middleware.beforeRequest(context);
-        }
-        
         // Send request asynchronously
-        return httpClient.sendAsync(
+        httpClient.sendAsync(
                 requestBuilder.build(),
                 java.net.http.HttpResponse.BodyHandlers.ofByteArray()
-        ).thenApply(response -> {
+        ).thenAccept(javaResponse -> {
             // Create response
             DefaultHttpResponse httpResponse = new DefaultHttpResponse(
-                    response.statusCode(),
-                    response.body(),
-                    convertHeaders(response.headers().map()),
-                    response.uri(),
+                    javaResponse.statusCode(),
+                    javaResponse.body(),
+                    convertHeaders(javaResponse.headers().map()),
+                    javaResponse.uri(),
                     request
             );
             
             // Apply response middleware in reverse order
-            for (int i = middlewares.size() - 1; i >= 0; i--) {
-                middlewares.get(i).afterResponse(context, httpResponse);
+            try {
+                for (int i = middlewares.size() - 1; i >= 0; i--) {
+                    middlewares.get(i).afterResponse(context, httpResponse);
+                }
+                futureResponse.complete(httpResponse);
+            } catch (RetryMiddleware.RetryException e) {
+                // Middleware requested a retry - for async, we'll handle this recursively
+                LOG.debug("Retry requested by middleware for async request");
+                
+                // Recursive call to retry the request
+                sendAsync(request).thenAccept(futureResponse::complete)
+                                 .exceptionally(ex -> {
+                                     futureResponse.completeExceptionally(ex);
+                                     return null;
+                                 });
+            } catch (Exception e) {
+                futureResponse.completeExceptionally(e);
+            }
+        }).exceptionally(e -> {
+            // Store exception in context for middleware to use
+            context.setAttribute("exception", e);
+            
+            // Create a dummy response for middleware
+            DefaultHttpResponse errorResponse = new DefaultHttpResponse(
+                    500, // Internal Server Error
+                    null,
+                    Collections.emptyMap(),
+                    request.getUri(),
+                    request
+            );
+            
+            // Apply response middleware to see if we should retry
+            try {
+                for (int i = middlewares.size() - 1; i >= 0; i--) {
+                    middlewares.get(i).afterResponse(context, errorResponse);
+                }
+                // If we get here, no middleware requested a retry
+                futureResponse.completeExceptionally(new NetworkException("Failed to send HTTP request", e));
+            } catch (RetryMiddleware.RetryException re) {
+                // Middleware requested a retry - for async, we'll handle this recursively
+                LOG.debug("Retry requested after exception for async request");
+                
+                // Recursive call to retry the request
+                sendAsync(request).thenAccept(futureResponse::complete)
+                                 .exceptionally(ex -> {
+                                     futureResponse.completeExceptionally(ex);
+                                     return null;
+                                 });
+            } catch (Exception ex) {
+                futureResponse.completeExceptionally(new NetworkException("Failed to send HTTP request", e));
             }
             
-            return httpResponse;
-        }).exceptionally(e -> {
-            throw new NetworkException("Failed to send HTTP request", e);
+            return null;
         });
+        
+        return futureResponse;
     }
     
     @Override
@@ -287,7 +416,12 @@ public class DefaultHttpClient implements HttpClient {
         // to comply with the NetworkClient interface
         if (connected.compareAndSet(false, true)) {
             for (ConnectionListener listener : connectionListeners) {
-                listener.onConnect(getConnection());
+                try {
+                    listener.onConnect(getConnection());
+                } catch (Exception e) {
+                    // Ignore exceptions from listeners
+                    LOG.warn("Exception in connection listener", e);
+                }
             }
         }
     }
@@ -309,7 +443,12 @@ public class DefaultHttpClient implements HttpClient {
         // Simulate disconnection
         if (connected.compareAndSet(true, false)) {
             for (ConnectionListener listener : connectionListeners) {
-                listener.onDisconnect(getConnection());
+                try {
+                    listener.onDisconnect(getConnection());
+                } catch (Exception e) {
+                    // Ignore exceptions from listeners
+                    LOG.warn("Exception in disconnection listener", e);
+                }
             }
         }
     }
