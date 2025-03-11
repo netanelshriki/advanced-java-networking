@@ -1,238 +1,162 @@
 package com.network.impl.http;
 
+import com.network.api.http.HttpClientBuilder;
+import com.network.api.http.HttpClientConfig;
+import com.network.api.http.middleware.HttpMiddleware;
+import com.network.serialization.JsonSerializer;
+import com.network.serialization.Serializer;
+
+import java.net.ProxySelector;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.function.Consumer;
-
-import javax.net.ssl.SSLContext;
-
-import com.network.api.http.HttpClientBuilder;
-import com.network.api.http.HttpClientConfig;
-import com.network.api.http.middleware.HttpMiddleware;
-import com.network.config.AbstractNetworkConfig;
-import com.network.serialization.Serializer;
-import com.network.serialization.SerializerFactory;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 /**
- * Default implementation of {@link HttpClientConfig}.
- * 
- * <p>This class provides a concrete implementation of the HTTP client configuration
- * interface with reasonable default values.
+ * Default implementation of the {@link HttpClientConfig} interface.
  */
-public class DefaultHttpClientConfig extends AbstractNetworkConfig implements HttpClientConfig {
+public class DefaultHttpClientConfig implements HttpClientConfig {
 
     private final URL baseUrl;
     private final Map<String, String> defaultHeaders;
-    private final String defaultContentType;
-    private final String defaultAccept;
-    private final String userAgent;
+    private final List<HttpMiddleware> middlewares;
+    private final Duration connectTimeout;
+    private final Duration requestTimeout;
     private final boolean followRedirects;
-    private final int maxRedirects;
-    private final boolean verifySsl;
-    private final SSLContext sslContext;
-    private final int maxConnectionsPerRoute;
-    private final int maxTotalConnections;
-    private final Duration connectionTimeToLive;
+    private final ProxySelector proxy;
+    private final Executor executor;
     private final Serializer serializer;
-    private final List<HttpMiddleware> middleware;
-    private final String proxyHost;
-    private final int proxyPort;
     
     /**
-     * Creates a new HTTP client configuration with the specified builder.
+     * Creates a new instance of DefaultHttpClientConfig.
      * 
-     * @param builder the builder containing the configuration values
+     * @param builder the builder used to create this configuration
      */
-    public DefaultHttpClientConfig(Builder builder) {
-        super(builder);
+    DefaultHttpClientConfig(Builder builder) {
         this.baseUrl = builder.baseUrl;
-        this.defaultHeaders = Collections.unmodifiableMap(new HashMap<>(builder.defaultHeaders));
-        this.defaultContentType = builder.defaultContentType;
-        this.defaultAccept = builder.defaultAccept;
-        this.userAgent = builder.userAgent;
+        this.defaultHeaders = new ConcurrentHashMap<>(builder.defaultHeaders);
+        this.middlewares = new ArrayList<>(builder.middlewares);
+        this.connectTimeout = builder.connectTimeout;
+        this.requestTimeout = builder.requestTimeout;
         this.followRedirects = builder.followRedirects;
-        this.maxRedirects = builder.maxRedirects;
-        this.verifySsl = builder.verifySsl;
-        this.sslContext = builder.sslContext;
-        this.maxConnectionsPerRoute = builder.maxConnectionsPerRoute;
-        this.maxTotalConnections = builder.maxTotalConnections;
-        this.connectionTimeToLive = builder.connectionTimeToLive;
+        this.proxy = builder.proxy;
+        this.executor = builder.executor;
         this.serializer = builder.serializer;
-        this.middleware = Collections.unmodifiableList(new ArrayList<>(builder.middleware));
-        this.proxyHost = builder.proxyHost;
-        this.proxyPort = builder.proxyPort;
     }
     
     @Override
-    public Optional<URL> getBaseUrl() {
-        return Optional.ofNullable(baseUrl);
+    public URL getBaseUrl() {
+        return baseUrl;
     }
     
     @Override
     public Map<String, String> getDefaultHeaders() {
-        return defaultHeaders;
+        return Collections.unmodifiableMap(defaultHeaders);
     }
     
-    @Override
-    public Optional<String> getDefaultContentType() {
-        return Optional.ofNullable(defaultContentType);
+    /**
+     * Gets the list of middlewares.
+     * 
+     * @return the list of middlewares
+     */
+    public List<HttpMiddleware> getMiddlewares() {
+        return Collections.unmodifiableList(middlewares);
     }
     
-    @Override
-    public Optional<String> getDefaultAccept() {
-        return Optional.ofNullable(defaultAccept);
+    /**
+     * Gets the connection timeout.
+     * 
+     * @return the connection timeout
+     */
+    public Duration getConnectTimeout() {
+        return connectTimeout;
     }
     
-    @Override
-    public Optional<String> getUserAgent() {
-        return Optional.ofNullable(userAgent);
+    /**
+     * Gets the request timeout.
+     * 
+     * @return the request timeout
+     */
+    public Duration getRequestTimeout() {
+        return requestTimeout;
     }
     
-    @Override
+    /**
+     * Checks if redirects should be followed.
+     * 
+     * @return true if redirects should be followed, false otherwise
+     */
     public boolean isFollowRedirects() {
         return followRedirects;
     }
     
-    @Override
-    public int getMaxRedirects() {
-        return maxRedirects;
-    }
-    
-    @Override
-    public boolean isVerifySsl() {
-        return verifySsl;
-    }
-    
-    @Override
-    public Optional<SSLContext> getSslContext() {
-        return Optional.ofNullable(sslContext);
-    }
-    
-    @Override
-    public int getMaxConnectionsPerRoute() {
-        return maxConnectionsPerRoute;
-    }
-    
-    @Override
-    public int getMaxTotalConnections() {
-        return maxTotalConnections;
-    }
-    
-    @Override
-    public Duration getConnectionTimeToLive() {
-        return connectionTimeToLive;
-    }
-    
-    @Override
-    public Optional<Serializer> getSerializer() {
-        return Optional.ofNullable(serializer);
-    }
-    
-    @Override
-    public List<HttpMiddleware> getMiddleware() {
-        return middleware;
-    }
-    
-    @Override
-    public Optional<String> getProxyHost() {
-        return Optional.ofNullable(proxyHost);
-    }
-    
-    @Override
-    public int getProxyPort() {
-        return proxyPort;
-    }
-    
-    @Override
-    public HttpClientBuilder toBuilder() {
-        return new Builder(this);
+    /**
+     * Gets the proxy selector.
+     * 
+     * @return the proxy selector
+     */
+    public ProxySelector getProxy() {
+        return proxy;
     }
     
     /**
-     * Builder for {@link DefaultHttpClientConfig}.
+     * Gets the executor service used for asynchronous operations.
+     * 
+     * @return the executor service
      */
-    public static class Builder extends AbstractNetworkConfigBuilder<Builder, HttpClientConfig> 
-            implements HttpClientBuilder {
-        
+    public Executor getExecutor() {
+        return executor;
+    }
+    
+    /**
+     * Gets the serializer.
+     * 
+     * @return the serializer
+     */
+    public Serializer getSerializer() {
+        return serializer;
+    }
+    
+    /**
+     * Creates a new builder instance for creating HttpClientConfig objects.
+     * 
+     * @return a new builder instance
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+    
+    /**
+     * Builder for creating {@link DefaultHttpClientConfig} instances.
+     */
+    public static class Builder implements HttpClientBuilder {
         private URL baseUrl;
-        private Map<String, String> defaultHeaders = new HashMap<>();
-        private String defaultContentType = "application/json";
-        private String defaultAccept = "application/json";
-        private String userAgent = "NetworkLib/1.0";
+        private final Map<String, String> defaultHeaders = new ConcurrentHashMap<>();
+        private final List<HttpMiddleware> middlewares = new ArrayList<>();
+        private Duration connectTimeout;
+        private Duration requestTimeout;
         private boolean followRedirects = true;
-        private int maxRedirects = 10;
-        private boolean verifySsl = true;
-        private SSLContext sslContext;
-        private int maxConnectionsPerRoute = 20;
-        private int maxTotalConnections = 100;
-        private Duration connectionTimeToLive = Duration.ofMinutes(5);
-        private Serializer serializer;
-        private List<HttpMiddleware> middleware = new ArrayList<>();
-        private String proxyHost;
-        private int proxyPort = -1;
+        private ProxySelector proxy;
+        private Executor executor;
+        private Serializer serializer = new JsonSerializer();
         
         /**
-         * Creates a new builder with default values.
-         */
-        public Builder() {
-            // Use default values
-        }
-        
-        /**
-         * Creates a new builder initialized with values from the specified configuration.
+         * Builds a new {@link DefaultHttpClientConfig} instance with the current settings.
          * 
-         * @param config the configuration to copy values from
+         * @return a new DefaultHttpClientConfig instance
          */
-        public Builder(HttpClientConfig config) {
-            super.connectionTimeout = config.getConnectionTimeout();
-            super.readTimeout = config.getReadTimeout();
-            super.writeTimeout = config.getWriteTimeout();
-            super.idleTimeout = config.getIdleTimeout();
-            super.maxRetryAttempts = config.getMaxRetryAttempts();
-            super.retryBackoffStrategy = config.getRetryBackoffStrategy();
-            super.keepAliveEnabled = config.isKeepAliveEnabled();
-            super.keepAliveInterval = config.getKeepAliveInterval();
-            super.bufferSize = config.getBufferSize();
-            super.properties.putAll(config.getProperties());
-            
-            this.baseUrl = config.getBaseUrl().orElse(null);
-            this.defaultHeaders.putAll(config.getDefaultHeaders());
-            this.defaultContentType = config.getDefaultContentType().orElse(defaultContentType);
-            this.defaultAccept = config.getDefaultAccept().orElse(defaultAccept);
-            this.userAgent = config.getUserAgent().orElse(userAgent);
-            this.followRedirects = config.isFollowRedirects();
-            this.maxRedirects = config.getMaxRedirects();
-            this.verifySsl = config.isVerifySsl();
-            this.sslContext = config.getSslContext().orElse(null);
-            this.maxConnectionsPerRoute = config.getMaxConnectionsPerRoute();
-            this.maxTotalConnections = config.getMaxTotalConnections();
-            this.connectionTimeToLive = config.getConnectionTimeToLive();
-            this.serializer = config.getSerializer().orElse(null);
-            this.middleware.addAll(config.getMiddleware());
-            this.proxyHost = config.getProxyHost().orElse(null);
-            this.proxyPort = config.getProxyPort();
+        @Override
+        public DefaultHttpClient build() {
+            DefaultHttpClientConfig config = new DefaultHttpClientConfig(this);
+            return new DefaultHttpClient(config);
         }
         
         @Override
-        public Builder withBaseUrl(URL baseUrl) {
-            if (baseUrl == null) {
-                throw new IllegalArgumentException("Base URL must not be null");
-            }
-            this.baseUrl = baseUrl;
-            return this;
-        }
-        
-        @Override
-        public Builder withBaseUrl(String baseUrl) {
-            if (baseUrl == null) {
-                throw new IllegalArgumentException("Base URL must not be null");
-            }
+        public HttpClientBuilder withBaseUrl(String baseUrl) {
             try {
                 this.baseUrl = new URL(baseUrl);
                 return this;
@@ -242,195 +166,116 @@ public class DefaultHttpClientConfig extends AbstractNetworkConfig implements Ht
         }
         
         @Override
-        public Builder withDefaultHeader(String name, String value) {
-            if (name == null) {
-                throw new IllegalArgumentException("Header name must not be null");
-            }
-            if (value == null) {
-                defaultHeaders.remove(name);
-            } else {
-                defaultHeaders.put(name, value);
-            }
+        public HttpClientBuilder withBaseUrl(URL baseUrl) {
+            this.baseUrl = baseUrl;
             return this;
         }
         
         @Override
-        public Builder withDefaultContentType(String contentType) {
-            if (contentType == null) {
-                throw new IllegalArgumentException("Content type must not be null");
-            }
-            this.defaultContentType = contentType;
+        public HttpClientBuilder withHeader(String name, String value) {
+            this.defaultHeaders.put(name, value);
             return this;
         }
         
         @Override
-        public Builder withDefaultAccept(String accept) {
-            if (accept == null) {
-                throw new IllegalArgumentException("Accept must not be null");
-            }
-            this.defaultAccept = accept;
+        public HttpClientBuilder withHeaders(Map<String, String> headers) {
+            this.defaultHeaders.putAll(headers);
             return this;
         }
         
         @Override
-        public Builder withUserAgent(String userAgent) {
-            if (userAgent == null) {
-                throw new IllegalArgumentException("User agent must not be null");
-            }
-            this.userAgent = userAgent;
+        public HttpClientBuilder withTimeout(Duration timeout) {
+            this.connectTimeout = timeout;
+            this.requestTimeout = timeout;
             return this;
         }
         
-        @Override
+        /**
+         * Sets the connection timeout.
+         * 
+         * @param timeout the connection timeout
+         * @return this builder instance
+         */
+        public Builder withConnectTimeout(Duration timeout) {
+            this.connectTimeout = timeout;
+            return this;
+        }
+        
+        /**
+         * Sets the request timeout.
+         * 
+         * @param timeout the request timeout
+         * @return this builder instance
+         */
+        public Builder withRequestTimeout(Duration timeout) {
+            this.requestTimeout = timeout;
+            return this;
+        }
+        
+        /**
+         * Sets whether to follow redirects.
+         * 
+         * @param followRedirects true to follow redirects, false otherwise
+         * @return this builder instance
+         */
         public Builder withFollowRedirects(boolean followRedirects) {
             this.followRedirects = followRedirects;
             return this;
         }
         
-        @Override
-        public Builder withMaxRedirects(int maxRedirects) {
-            if (maxRedirects < 0) {
-                throw new IllegalArgumentException("Max redirects must not be negative");
-            }
-            this.maxRedirects = maxRedirects;
+        /**
+         * Sets the proxy selector.
+         * 
+         * @param proxy the proxy selector
+         * @return this builder instance
+         */
+        public Builder withProxy(ProxySelector proxy) {
+            this.proxy = proxy;
             return this;
         }
         
-        @Override
-        public Builder withVerifySsl(boolean verify) {
-            this.verifySsl = verify;
+        /**
+         * Sets the executor service.
+         * 
+         * @param executor the executor service
+         * @return this builder instance
+         */
+        public Builder withExecutor(Executor executor) {
+            this.executor = executor;
             return this;
         }
         
-        @Override
-        public Builder withSslContext(SSLContext sslContext) {
-            if (sslContext == null) {
-                throw new IllegalArgumentException("SSL context must not be null");
-            }
-            this.sslContext = sslContext;
-            return this;
-        }
-        
-        @Override
-        public Builder withTrustManagerFactory(javax.net.ssl.TrustManagerFactory trustManagerFactory) {
-            if (trustManagerFactory == null) {
-                throw new IllegalArgumentException("Trust manager factory must not be null");
-            }
-            try {
-                SSLContext context = SSLContext.getInstance("TLS");
-                context.init(null, trustManagerFactory.getTrustManagers(), null);
-                this.sslContext = context;
-                return this;
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to initialize SSL context", e);
-            }
-        }
-        
-        @Override
-        public Builder withTrustStore(java.security.KeyStore trustStore) {
-            if (trustStore == null) {
-                throw new IllegalArgumentException("Trust store must not be null");
-            }
-            try {
-                javax.net.ssl.TrustManagerFactory tmf = 
-                    javax.net.ssl.TrustManagerFactory.getInstance(
-                        javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(trustStore);
-                return withTrustManagerFactory(tmf);
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to initialize trust manager factory", e);
-            }
-        }
-        
-        @Override
-        public Builder withMaxConnectionsPerRoute(int maxConnections) {
-            if (maxConnections <= 0) {
-                throw new IllegalArgumentException("Max connections per route must be positive");
-            }
-            this.maxConnectionsPerRoute = maxConnections;
-            return this;
-        }
-        
-        @Override
-        public Builder withMaxTotalConnections(int maxConnections) {
-            if (maxConnections <= 0) {
-                throw new IllegalArgumentException("Max total connections must be positive");
-            }
-            this.maxTotalConnections = maxConnections;
-            return this;
-        }
-        
-        @Override
-        public Builder withConnectionTimeToLive(Duration ttl) {
-            if (ttl == null || ttl.isNegative()) {
-                throw new IllegalArgumentException("Connection time to live must not be null or negative");
-            }
-            this.connectionTimeToLive = ttl;
-            return this;
-        }
-        
-        @Override
+        /**
+         * Sets the serializer.
+         * 
+         * @param serializer the serializer
+         * @return this builder instance
+         */
         public Builder withSerializer(Serializer serializer) {
-            if (serializer == null) {
-                throw new IllegalArgumentException("Serializer must not be null");
-            }
             this.serializer = serializer;
-            // Also set the default content type and accept to match the serializer
-            this.defaultContentType = serializer.getContentType();
-            this.defaultAccept = serializer.getContentType();
             return this;
         }
         
-        @Override
+        /**
+         * Adds a middleware to the client.
+         * 
+         * @param middleware the middleware to add
+         * @return this builder instance
+         */
         public Builder withMiddleware(HttpMiddleware middleware) {
-            if (middleware == null) {
-                throw new IllegalArgumentException("Middleware must not be null");
-            }
-            this.middleware.add(middleware);
-            // Sort middleware by order
-            Collections.sort(this.middleware, (m1, m2) -> Integer.compare(m1.getOrder(), m2.getOrder()));
+            this.middlewares.add(middleware);
             return this;
         }
         
-        @Override
-        public Builder withProxy(String host, int port) {
-            if (host == null) {
-                throw new IllegalArgumentException("Proxy host must not be null");
-            }
-            if (port <= 0 || port > 65535) {
-                throw new IllegalArgumentException("Proxy port must be between 1 and 65535");
-            }
-            this.proxyHost = host;
-            this.proxyPort = port;
+        /**
+         * Adds multiple middlewares to the client.
+         * 
+         * @param middlewares the middlewares to add
+         * @return this builder instance
+         */
+        public Builder withMiddlewares(List<HttpMiddleware> middlewares) {
+            this.middlewares.addAll(middlewares);
             return this;
         }
-        
-        @Override
-        public Builder configure(Consumer<HttpClientBuilder> configurer) {
-            if (configurer == null) {
-                throw new IllegalArgumentException("Configurer must not be null");
-            }
-            configurer.accept(this);
-            return this;
-        }
-        
-        @Override
-        public HttpClientConfig build() {
-            // Initialize serializer if not set
-            if (serializer == null) {
-                serializer = SerializerFactory.getInstance().getSerializer(defaultContentType);
-            }
-            
-            return new DefaultHttpClientConfig(this);
-        }
-    }
-    
-    /**
-     * Creates a new builder for {@link DefaultHttpClientConfig}.
-     * 
-     * @return a new builder
-     */
-    public static Builder builder() {
-        return new Builder();
     }
 }
