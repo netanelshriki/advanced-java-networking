@@ -43,6 +43,27 @@ This library implements modern design patterns and best practices to offer a com
 | WebSocket Client | ✅ Complete | Basic implementation available |
 | Unit Tests | 🔴 Not Started | To be implemented |
 
+## Architecture
+
+The library is designed with a layered architecture:
+
+1. **Core API Layer**: Interfaces defining the networking contracts
+2. **Protocol Implementations**: Concrete implementations for each protocol
+3. **Middleware Layer**: Pluggable components for cross-cutting concerns
+4. **Utility Layer**: Support classes and helpers
+
+### Architecture Diagram
+
+![Architecture Diagram](docs/architecture.svg)
+
+This diagram illustrates the layered architecture of the library, showing how the different components interact. The design follows a clean separation of concerns, allowing for flexibility and modularity.
+
+### Class Hierarchy
+
+![Class Hierarchy Diagram](docs/class-hierarchy.svg)
+
+The class hierarchy diagram shows the inheritance and implementation relationships between the major interfaces and classes in the library. This demonstrates the application of design principles like interface-based design and composition over inheritance.
+
 ## Getting Started
 
 Add the library to your Maven project:
@@ -151,15 +172,6 @@ client.sendText("Hello, WebSocket!");
 // Send binary message
 client.sendBinary(binaryData);
 ```
-
-## Architecture
-
-The library is designed with a layered architecture:
-
-1. **Core API Layer**: Interfaces defining the networking contracts
-2. **Protocol Implementations**: Concrete implementations for each protocol
-3. **Middleware Layer**: Pluggable components for cross-cutting concerns
-4. **Utility Layer**: Support classes and helpers
 
 ## Contributing
 
