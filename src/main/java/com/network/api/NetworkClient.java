@@ -1,6 +1,5 @@
 package com.network.api;
 
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -12,121 +11,103 @@ import com.network.exception.NetworkException;
 /**
  * Base interface for all network clients.
  * 
- * <p>This interface defines the common operations for all network clients
- * irrespective of the underlying protocol. It provides methods for connecting,
- * disconnecting, checking connection status, and registering event listeners.
- * 
- * <p>All implementations must be thread-safe.
+ * <p>This interface defines the common operations for all network clients,
+ * such as connecting, disconnecting, and checking connection status.
  */
-public interface NetworkClient extends Closeable {
+public interface NetworkClient extends AutoCloseable {
     
     /**
      * Connects to the remote endpoint.
      * 
-     * <p>This method is idempotent. If the client is already connected,
-     * this method will return immediately.
-     * 
-     * @throws NetworkException if connection fails
+     * @throws NetworkException if an error occurs
      */
     void connect() throws NetworkException;
     
     /**
      * Connects to the remote endpoint asynchronously.
      * 
-     * <p>This method is idempotent. If the client is already connected,
-     * the returned future will complete immediately.
-     * 
-     * @return a CompletableFuture that completes when connection is established
+     * @return a CompletableFuture that completes when the connection is established
      */
     CompletableFuture<Void> connectAsync();
     
     /**
      * Disconnects from the remote endpoint.
-     * 
-     * <p>This method is idempotent. If the client is already disconnected,
-     * this method will return immediately.
      */
     void disconnect();
     
     /**
      * Disconnects from the remote endpoint asynchronously.
      * 
-     * <p>This method is idempotent. If the client is already disconnected,
-     * the returned future will complete immediately.
-     * 
-     * @return a CompletableFuture that completes when disconnection is finished
+     * @return a CompletableFuture that completes when the disconnect is complete
      */
     CompletableFuture<Void> disconnectAsync();
     
     /**
-     * Checks if the client is currently connected.
+     * Checks if the client is connected.
      * 
      * @return true if connected, false otherwise
      */
     boolean isConnected();
     
     /**
-     * Gets the current connection, if connected.
+     * Gets the underlying connection.
      * 
-     * @return the current connection or null if not connected
+     * @return the connection, or null if not connected
      */
     Connection getConnection();
     
     /**
-     * Registers a listener for connection events.
+     * Adds a connection listener.
      * 
-     * @param listener the listener to register
-     * @return this client instance for method chaining
+     * @param listener the listener to add
+     * @return this client
      */
     NetworkClient addConnectionListener(ConnectionListener listener);
     
     /**
-     * Removes a previously registered connection listener.
+     * Removes a connection listener.
      * 
      * @param listener the listener to remove
-     * @return true if the listener was found and removed, false otherwise
+     * @return true if the listener was removed, false if it wasn't registered
      */
     boolean removeConnectionListener(ConnectionListener listener);
     
     /**
-     * Convenience method to register a callback for when a connection is established.
+     * Registers a callback to be invoked when the client connects.
      * 
-     * @param callback the callback to execute when connected
-     * @return this client instance for method chaining
+     * @param callback the callback to invoke
+     * @return this client
      */
     NetworkClient onConnect(Consumer<Connection> callback);
     
     /**
-     * Convenience method to register a callback for when a connection is closed.
+     * Registers a callback to be invoked when the client disconnects.
      * 
-     * @param callback the callback to execute when disconnected
-     * @return this client instance for method chaining
+     * @param callback the callback to invoke
+     * @return this client
      */
     NetworkClient onDisconnect(Consumer<Connection> callback);
     
     /**
-     * Convenience method to register a callback for when an error occurs.
+     * Registers a callback to be invoked when an error occurs.
      * 
-     * @param callback the callback to execute when an error occurs
-     * @return this client instance for method chaining
+     * @param callback the callback to invoke
+     * @return this client
      */
     NetworkClient onError(Consumer<Throwable> callback);
     
     /**
-     * Sets the connection timeout for this client.
+     * Sets the connection timeout.
      * 
-     * @param timeout the connection timeout
-     * @return this client instance for method chaining
-     * @throws IllegalArgumentException if timeout is negative
+     * @param timeout the timeout
+     * @return this client
      * @throws IllegalStateException if the client is already connected
+     * @throws IllegalArgumentException if the timeout is negative
      */
     NetworkClient withConnectionTimeout(Duration timeout);
     
     /**
-     * Closes this client and releases any resources associated with it.
-     * 
-     * <p>If the client is connected, it will be disconnected.
-     * This method is idempotent.
+     * Closes this client, disconnecting if necessary.
      */
     @Override
     void close();
