@@ -1,16 +1,18 @@
 package com.network.impl.http;
 
-import com.network.api.http.HttpClient;
 import com.network.api.http.HttpRequest;
 import com.network.api.http.HttpResponse;
 import com.network.api.http.HttpResponseException;
-import com.network.middleware.http.RetryMiddleware.MutableHttpResponse;
+import com.network.middleware.http.CircuitBreakerMiddleware;
+import com.network.middleware.http.LoggingMiddleware;
+import com.network.middleware.http.RetryMiddleware;
 import com.network.serialization.Serializer;
 
 import java.net.URI;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default implementation of the {@link HttpResponse} interface.
@@ -35,7 +37,7 @@ class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
     DefaultHttpResponse(int statusCode, byte[] body, Map<String, String> headers, URI uri, HttpRequest request) {
         this.statusCode = statusCode;
         this.body = body;
-        this.headers = new HashMap<>(headers);
+        this.headers = new ConcurrentHashMap<>(headers);
         this.uri = uri;
         this.request = request;
     }
@@ -71,23 +73,21 @@ class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
             return null;
         }
         
-        // Try to get the serializer from the client
+        // Get serializer from the client if possible
         Serializer serializer = null;
-        
-        // Check if the request has a client reference
-        if (request instanceof DefaultHttpRequest) {
-            HttpClient client = ((DefaultHttpRequest) request).getClient();
-            if (client instanceof DefaultHttpClient) {
-                serializer = ((DefaultHttpClient) client).getSerializer();
+        if (request != null && request instanceof DefaultHttpRequest) {
+            DefaultHttpRequest httpRequest = (DefaultHttpRequest) request;
+            if (httpRequest.getClient() instanceof DefaultHttpClient) {
+                DefaultHttpClient client = (DefaultHttpClient) httpRequest.getClient();
+                serializer = client.getSerializer();
             }
         }
         
-        if (serializer == null) {
-            // Fallback to a default serializer or throw an error
-            throw new IllegalStateException("No serializer configured");
+        if (serializer != null) {
+            return serializer.deserialize(body, type);
         }
         
-        return serializer.deserialize(body, type);
+        throw new IllegalStateException("No serializer configured");
     }
 
     @Override
@@ -225,4 +225,18 @@ class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
             return STATUS_MESSAGES.getOrDefault(statusCode, "Unknown");
         }
     }
+}
+
+/**
+ * Interface for modifiable HTTP responses.
+ * This is used by middleware to add headers to responses.
+ */
+interface MutableHttpResponse {
+    /**
+     * Adds a header to the response.
+     * 
+     * @param name  the header name
+     * @param value the header value
+     */
+    void addHeader(String name, String value);
 }
