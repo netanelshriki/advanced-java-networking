@@ -1,9 +1,7 @@
 package com.network.impl.http;
 
-import com.network.api.http.HttpClient;
 import com.network.api.http.HttpMethod;
 import com.network.api.http.HttpRequest;
-import com.network.middleware.http.MutableHttpRequest;
 
 import java.net.URI;
 import java.time.Duration;
@@ -21,7 +19,6 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
     private final Map<String, String> headers;
     private final byte[] body;
     private final Duration timeout;
-    private final HttpClient client;
     
     /**
      * Creates a new DefaultHttpRequest.
@@ -31,15 +28,13 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
      * @param headers the request headers
      * @param body    the request body
      * @param timeout the request timeout
-     * @param client  the HTTP client that created this request
      */
-    DefaultHttpRequest(URI uri, HttpMethod method, Map<String, String> headers, byte[] body, Duration timeout, HttpClient client) {
+    DefaultHttpRequest(URI uri, HttpMethod method, Map<String, String> headers, byte[] body, Duration timeout) {
         this.uri = uri;
         this.method = method;
         this.headers = new HashMap<>(headers);
         this.body = body;
         this.timeout = timeout;
-        this.client = client;
     }
 
     @Override
@@ -66,19 +61,10 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
     public Duration getTimeout() {
         return timeout;
     }
-    
-    /**
-     * Gets the HTTP client that created this request.
-     * 
-     * @return the HTTP client
-     */
-    public HttpClient getClient() {
-        return client;
-    }
 
     @Override
     public void addHeader(String name, String value) {
-        headers.put(name, value);
+        this.headers.put(name, value);
     }
 
     @Override
@@ -86,4 +72,17 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
         return method + " " + uri + ", headers: " + headers.size() + 
                ", body: " + (body == null ? "null" : body.length + " bytes");
     }
+}
+
+/**
+ * Interface for modifiable HTTP requests.
+ */
+interface MutableHttpRequest {
+    /**
+     * Adds a header to the request.
+     * 
+     * @param name the header name
+     * @param value the header value
+     */
+    void addHeader(String name, String value);
 }
