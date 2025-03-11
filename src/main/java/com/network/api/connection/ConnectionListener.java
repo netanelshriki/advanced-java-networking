@@ -8,14 +8,14 @@ public interface ConnectionListener {
     /**
      * Called when a connection is established.
      * 
-     * @param connection the established connection
+     * @param connection the connection
      */
     void onConnect(Connection connection);
     
     /**
      * Called when a connection is closed.
      * 
-     * @param connection the closed connection
+     * @param connection the connection
      */
     void onDisconnect(Connection connection);
     
@@ -23,7 +23,7 @@ public interface ConnectionListener {
      * Called when an error occurs on a connection.
      * 
      * @param connection the connection where the error occurred
-     * @param throwable the error that occurred
+     * @param throwable the error
      */
     void onError(Connection connection, Throwable throwable);
 }
