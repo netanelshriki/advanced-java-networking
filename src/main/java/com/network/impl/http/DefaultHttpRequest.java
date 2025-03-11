@@ -1,15 +1,13 @@
 package com.network.impl.http;
 
-import com.network.api.http.HttpClient;
 import com.network.api.http.HttpMethod;
 import com.network.api.http.HttpRequest;
-import com.network.middleware.http.CircuitBreakerMiddleware.MutableHttpRequest;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default implementation of the {@link HttpRequest} interface.
@@ -21,26 +19,7 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
     private final Map<String, String> headers;
     private final byte[] body;
     private final Duration timeout;
-    private final HttpClient client;
-    
-    /**
-     * Creates a new DefaultHttpRequest.
-     * 
-     * @param uri     the request URI
-     * @param method  the HTTP method
-     * @param headers the request headers
-     * @param body    the request body
-     * @param timeout the request timeout
-     * @param client  the client that created this request
-     */
-    DefaultHttpRequest(URI uri, HttpMethod method, Map<String, String> headers, byte[] body, Duration timeout, HttpClient client) {
-        this.uri = uri;
-        this.method = method;
-        this.headers = new HashMap<>(headers);
-        this.body = body;
-        this.timeout = timeout;
-        this.client = client;
-    }
+    private final DefaultHttpClient client;
     
     /**
      * Creates a new DefaultHttpRequest.
@@ -53,6 +32,25 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
      */
     DefaultHttpRequest(URI uri, HttpMethod method, Map<String, String> headers, byte[] body, Duration timeout) {
         this(uri, method, headers, body, timeout, null);
+    }
+    
+    /**
+     * Creates a new DefaultHttpRequest with a client reference.
+     * 
+     * @param uri     the request URI
+     * @param method  the HTTP method
+     * @param headers the request headers
+     * @param body    the request body
+     * @param timeout the request timeout
+     * @param client  the HTTP client that created this request
+     */
+    DefaultHttpRequest(URI uri, HttpMethod method, Map<String, String> headers, byte[] body, Duration timeout, DefaultHttpClient client) {
+        this.uri = uri;
+        this.method = method;
+        this.headers = new ConcurrentHashMap<>(headers);
+        this.body = body;
+        this.timeout = timeout;
+        this.client = client;
     }
 
     @Override
@@ -81,11 +79,11 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
     }
     
     /**
-     * Gets the client that created this request.
+     * Gets the HTTP client that created this request.
      * 
-     * @return the client, or null if not available
+     * @return the HTTP client, or null if not available
      */
-    HttpClient getClient() {
+    DefaultHttpClient getClient() {
         return client;
     }
 
@@ -99,4 +97,18 @@ class DefaultHttpRequest implements HttpRequest, MutableHttpRequest {
     public void addHeader(String name, String value) {
         headers.put(name, value);
     }
+}
+
+/**
+ * Interface for modifiable HTTP requests.
+ * This is used by middleware to add headers to requests.
+ */
+interface MutableHttpRequest {
+    /**
+     * Adds a header to the request.
+     * 
+     * @param name  the header name
+     * @param value the header value
+     */
+    void addHeader(String name, String value);
 }
