@@ -35,12 +35,12 @@ This library implements modern design patterns and best practices to offer a com
 | Core Framework | ✅ Complete | Core interfaces, configuration, exceptions |
 | TCP Client | ✅ Complete | Full Netty-based implementation |
 | HTTP Client Interfaces | ✅ Complete | All interfaces defined |
-| HTTP Client Implementation | 🟡 Partial | Config implemented, client pending |
+| HTTP Client Implementation | ✅ Complete | Full implementation with Java HTTP Client |
 | Serialization Framework | ✅ Complete | JSON implementation with Jackson |
 | Middleware Framework | ✅ Complete | Interfaces and base classes |
-| Middleware Implementations | ✅ Complete | Logging, retry middleware |
-| UDP Client | 🔴 Not Started | Interfaces defined |
-| WebSocket Client | 🔴 Not Started | Interfaces defined |
+| Middleware Implementations | ✅ Complete | Logging, retry, rate limiting, resilience middleware |
+| UDP Client | ✅ Complete | Basic implementation available |
+| WebSocket Client | ✅ Complete | Basic implementation available |
 | Unit Tests | 🔴 Not Started | To be implemented |
 
 ## Getting Started
@@ -108,6 +108,48 @@ byte[] response = client.send(data)
 client.onConnect(conn -> logger.info("Connected to server"))
     .onDisconnect(reason -> logger.warn("Disconnected: {}", reason))
     .onError(ex -> logger.error("Error occurred", ex));
+```
+
+### UDP Client Example
+
+```java
+// Create a UDP client
+UdpClient client = NetworkLib.createUdpClient()
+    .withAddress("example.com", 9000)
+    .withTimeout(Duration.ofSeconds(5))
+    .build();
+
+// Send data (fire and forget)
+client.send(data).execute();
+
+// Or with reply expectation
+byte[] response = client.send(data)
+    .expectReply()
+    .withTimeout(Duration.ofSeconds(5))
+    .execute();
+```
+
+### WebSocket Example
+
+```java
+// Create a WebSocket client
+WebSocketClient client = NetworkLib.createWebSocketClient()
+    .withUrl("wss://example.com/socket")
+    .withConnectionTimeout(Duration.ofSeconds(10))
+    .build();
+
+// Connect and setup handlers
+client.connect();
+client.onMessage(message -> {
+    // Handle incoming message
+    System.out.println("Received: " + message.getTextContent());
+});
+
+// Send text message
+client.sendText("Hello, WebSocket!");
+
+// Send binary message
+client.sendBinary(binaryData);
 ```
 
 ## Architecture
