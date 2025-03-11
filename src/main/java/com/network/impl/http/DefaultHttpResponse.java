@@ -3,7 +3,6 @@ package com.network.impl.http;
 import com.network.api.http.HttpRequest;
 import com.network.api.http.HttpResponse;
 import com.network.api.http.HttpResponseException;
-import com.network.middleware.http.MutableHttpResponse;
 import com.network.serialization.Serializer;
 
 import java.net.URI;
@@ -70,28 +69,19 @@ class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
             return null;
         }
         
-        // Get the serializer from the client
-        Serializer serializer = getSerializer();
-        if (serializer == null) {
-            throw new IllegalStateException("No serializer configured");
-        }
-        
-        return serializer.deserialize(body, type);
-    }
-    
-    /**
-     * Gets the serializer to use for deserialization.
-     * 
-     * @return the serializer or null if not available
-     */
-    private Serializer getSerializer() {
-        if (request != null && request instanceof DefaultHttpRequest) {
-            DefaultHttpRequest httpRequest = (DefaultHttpRequest) request;
-            if (httpRequest.getClient() instanceof DefaultHttpClient) {
-                return ((DefaultHttpClient) httpRequest.getClient()).getSerializer();
+        // Use the client's serializer if the request came from our client
+        if (request instanceof DefaultHttpRequest && 
+            ((DefaultHttpRequestBuilder)request).getClient() instanceof DefaultHttpClient) {
+            
+            DefaultHttpClient client = (DefaultHttpClient) ((DefaultHttpRequestBuilder)request).getClient();
+            Serializer serializer = client.getSerializer();
+            
+            if (serializer != null) {
+                return serializer.deserialize(body, type);
             }
         }
-        return null;
+        
+        throw new IllegalStateException("No serializer configured");
     }
 
     @Override
@@ -129,7 +119,7 @@ class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
 
     @Override
     public void addHeader(String name, String value) {
-        headers.put(name, value);
+        this.headers.put(name, value);
     }
 
     @Override
@@ -229,4 +219,17 @@ class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
             return STATUS_MESSAGES.getOrDefault(statusCode, "Unknown");
         }
     }
+}
+
+/**
+ * Interface for modifiable HTTP responses.
+ */
+interface MutableHttpResponse {
+    /**
+     * Adds a header to the response.
+     * 
+     * @param name the header name
+     * @param value the header value
+     */
+    void addHeader(String name, String value);
 }
