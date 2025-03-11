@@ -35,7 +35,7 @@ jobs:
         report_paths: '**/target/surefire-reports/TEST-*.xml'
     
     - name: Upload Build Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: advanced-java-networking-jar
         path: target/*.jar
