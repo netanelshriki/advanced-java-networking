@@ -1,8 +1,10 @@
 package com.network.impl.http;
 
+import com.network.api.http.HttpClient;
 import com.network.api.http.HttpRequest;
 import com.network.api.http.HttpResponse;
 import com.network.api.http.HttpResponseException;
+import com.network.middleware.http.RetryMiddleware.MutableHttpResponse;
 import com.network.serialization.Serializer;
 
 import java.net.URI;
@@ -13,7 +15,7 @@ import java.util.Map;
 /**
  * Default implementation of the {@link HttpResponse} interface.
  */
-class DefaultHttpResponse implements HttpResponse {
+class DefaultHttpResponse implements HttpResponse, MutableHttpResponse {
 
     private final int statusCode;
     private final byte[] body;
@@ -69,19 +71,23 @@ class DefaultHttpResponse implements HttpResponse {
             return null;
         }
         
-        // Use the client's serializer if the request came from our client
-        if (request instanceof DefaultHttpRequest && 
-            ((DefaultHttpRequestBuilder)request).getClient() instanceof DefaultHttpClient) {
-            
-            DefaultHttpClient client = (DefaultHttpClient) ((DefaultHttpRequestBuilder)request).getClient();
-            Serializer serializer = client.getSerializer();
-            
-            if (serializer != null) {
-                return serializer.deserialize(body, type);
+        // Try to get the serializer from the client
+        Serializer serializer = null;
+        
+        // Check if the request has a client reference
+        if (request instanceof DefaultHttpRequest) {
+            HttpClient client = ((DefaultHttpRequest) request).getClient();
+            if (client instanceof DefaultHttpClient) {
+                serializer = ((DefaultHttpClient) client).getSerializer();
             }
         }
         
-        throw new IllegalStateException("No serializer configured");
+        if (serializer == null) {
+            // Fallback to a default serializer or throw an error
+            throw new IllegalStateException("No serializer configured");
+        }
+        
+        return serializer.deserialize(body, type);
     }
 
     @Override
@@ -122,6 +128,11 @@ class DefaultHttpResponse implements HttpResponse {
         return "HTTP " + statusCode + " " + getStatusMessage() + ", " +
                "headers: " + headers.size() + ", " +
                "body: " + (body == null ? "null" : body.length + " bytes");
+    }
+    
+    @Override
+    public void addHeader(String name, String value) {
+        headers.put(name, value);
     }
     
     /**
