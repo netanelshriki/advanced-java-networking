@@ -12,13 +12,14 @@ import java.util.Optional;
 import com.network.api.http.HttpRequest;
 import com.network.api.http.HttpResponse;
 import com.network.api.http.HttpResponseException;
+import com.network.serialization.SerializationException;
 import com.network.serialization.Serializer;
 
 /**
  * Default implementation of {@link HttpResponse}.
  * 
- * <p>This class represents an HTTP response with all associated data,
- * such as status code, headers, and body.
+ * <p>This class provides a concrete implementation of the HTTP response
+ * interface with common functionality for processing responses.
  * 
  * @param <T> the type of the deserialized body, or Void if not deserialized
  */
@@ -33,24 +34,52 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
     private final HttpRequest request;
     private final Duration responseTime;
     private final Duration timeToFirstByte;
+    private final String contentType;
     private final Serializer serializer;
     
     /**
-     * Creates a new HTTP response.
+     * Creates a new HTTP response with the specified parameters.
      * 
-     * @param builder the builder with the response configuration
+     * @param builder the builder containing the response data
      */
-    private DefaultHttpResponse(Builder<T> builder) {
+    protected DefaultHttpResponse(Builder<T> builder) {
         this.statusCode = builder.statusCode;
         this.statusMessage = builder.statusMessage;
         this.requestUri = builder.requestUri;
-        this.headers = Collections.unmodifiableMap(builder.headers);
+        this.headers = Collections.unmodifiableMap(new HashMap<>(builder.headers));
         this.body = builder.body;
         this.deserializedBody = builder.deserializedBody;
         this.request = builder.request;
         this.responseTime = builder.responseTime;
         this.timeToFirstByte = builder.timeToFirstByte;
+        this.contentType = extractContentType(builder.headers);
         this.serializer = builder.serializer;
+    }
+    
+    /**
+     * Extracts the content type from the response headers.
+     * 
+     * @param headers the response headers
+     * @return the content type, or null if not found
+     */
+    private String extractContentType(Map<String, List<String>> headers) {
+        List<String> contentTypeHeaders = headers.get("Content-Type");
+        if (contentTypeHeaders != null && !contentTypeHeaders.isEmpty()) {
+            return contentTypeHeaders.get(0);
+        }
+        
+        // Try case-insensitive lookup
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if ("content-type".equalsIgnoreCase(entry.getKey())) {
+                List<String> values = entry.getValue();
+                if (values != null && !values.isEmpty()) {
+                    return values.get(0);
+                }
+                break;
+            }
+        }
+        
+        return null;
     }
     
     @Override
@@ -79,14 +108,12 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
             return Optional.empty();
         }
         
-        // Case-insensitive header lookup
-        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(name) && !entry.getValue().isEmpty()) {
-                return Optional.of(entry.getValue().get(0));
-            }
+        List<String> values = getHeaderValues(name);
+        if (values.isEmpty()) {
+            return Optional.empty();
         }
         
-        return Optional.empty();
+        return Optional.of(values.get(0));
     }
     
     @Override
@@ -95,10 +122,16 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
             return Collections.emptyList();
         }
         
-        // Case-insensitive header lookup
+        // Direct lookup
+        List<String> values = headers.get(name);
+        if (values != null) {
+            return Collections.unmodifiableList(values);
+        }
+        
+        // Case-insensitive lookup
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(name)) {
-                return entry.getValue();
+            if (name.equalsIgnoreCase(entry.getKey())) {
+                return Collections.unmodifiableList(entry.getValue());
             }
         }
         
@@ -121,16 +154,29 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
             return "";
         }
         
-        // Use the serializer's charset to decode the bytes
-        if (serializer != null && serializer instanceof com.network.serialization.json.JsonSerializer) {
-            return new String(body, ((com.network.serialization.json.JsonSerializer) serializer).getCharset());
+        // Determine charset from content type
+        String charset = "UTF-8";
+        if (contentType != null) {
+            int charsetIndex = contentType.toLowerCase().indexOf("charset=");
+            if (charsetIndex != -1) {
+                int endIndex = contentType.indexOf(';', charsetIndex);
+                if (endIndex == -1) {
+                    endIndex = contentType.length();
+                }
+                charset = contentType.substring(charsetIndex + 8, endIndex).trim();
+            }
         }
         
-        // Default to UTF-8
-        return new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            return new String(body, charset);
+        } catch (Exception e) {
+            // Fall back to UTF-8
+            return new String(body);
+        }
     }
     
     @Override
+    @SuppressWarnings("unchecked")
     public T getBody() {
         return deserializedBody;
     }
@@ -142,15 +188,19 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         if (serializer == null) {
-            throw new IllegalStateException("No serializer configured for deserialization");
+            throw new IllegalStateException("No serializer available to deserialize response body");
         }
         
-        return serializer.deserialize(body, type);
+        try {
+            return serializer.deserialize(body, type);
+        } catch (SerializationException e) {
+            throw new IllegalStateException("Failed to deserialize response body to " + type.getName(), e);
+        }
     }
     
     @Override
     public Optional<String> getContentType() {
-        return getHeader("Content-Type");
+        return Optional.ofNullable(contentType);
     }
     
     @Override
@@ -170,7 +220,7 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
     
     @Override
     public HttpResponse<Void> asUntyped() {
-        return new DefaultHttpResponse<>(new Builder<Void>()
+        return new Builder<Void>()
             .statusCode(statusCode)
             .statusMessage(statusMessage)
             .requestUri(requestUri)
@@ -179,7 +229,8 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
             .request(request)
             .responseTime(responseTime)
             .timeToFirstByte(timeToFirstByte)
-            .serializer(serializer));
+            .serializer(serializer)
+            .build();
     }
     
     @Override
@@ -193,8 +244,9 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
     @Override
     public HttpResponse<T> assertStatusCode(int expectedStatusCode) throws HttpResponseException {
         if (statusCode != expectedStatusCode) {
-            throw new HttpResponseException(this, "Expected status code " + expectedStatusCode + 
-                " but got " + statusCode);
+            throw new HttpResponseException(
+                this, 
+                "Expected status code " + expectedStatusCode + " but got " + statusCode);
         }
         return this;
     }
@@ -205,29 +257,20 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
             throw new IllegalArgumentException("Type must not be null");
         }
         
-        U bodyAs = getBodyAs(type);
+        U convertedBody = getBodyAs(type);
         
-        return new DefaultHttpResponse<>(new Builder<U>()
+        return new Builder<U>()
             .statusCode(statusCode)
             .statusMessage(statusMessage)
             .requestUri(requestUri)
             .headers(headers)
             .body(body)
-            .deserializedBody(bodyAs)
+            .deserializedBody(convertedBody)
             .request(request)
             .responseTime(responseTime)
             .timeToFirstByte(timeToFirstByte)
-            .serializer(serializer));
-    }
-    
-    /**
-     * Creates a new builder for {@link DefaultHttpResponse}.
-     * 
-     * @param <T> the type of the deserialized body
-     * @return a new builder
-     */
-    public static <T> Builder<T> builder() {
-        return new Builder<>();
+            .serializer(serializer)
+            .build();
     }
     
     /**
@@ -238,9 +281,9 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
     public static class Builder<T> {
         
         private int statusCode;
-        private String statusMessage = "";
+        private String statusMessage;
         private URI requestUri;
-        private final Map<String, List<String>> headers = new HashMap<>();
+        private Map<String, List<String>> headers = new HashMap<>();
         private byte[] body;
         private T deserializedBody;
         private HttpRequest request;
@@ -249,7 +292,14 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         private Serializer serializer;
         
         /**
-         * Sets the status code.
+         * Creates a new builder with default values.
+         */
+        public Builder() {
+            // Default constructor
+        }
+        
+        /**
+         * Sets the status code of the response.
          * 
          * @param statusCode the status code
          * @return this builder
@@ -260,18 +310,18 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         /**
-         * Sets the status message.
+         * Sets the status message of the response.
          * 
          * @param statusMessage the status message
          * @return this builder
          */
         public Builder<T> statusMessage(String statusMessage) {
-            this.statusMessage = statusMessage != null ? statusMessage : "";
+            this.statusMessage = statusMessage;
             return this;
         }
         
         /**
-         * Sets the request URI.
+         * Sets the request URI of the response.
          * 
          * @param requestUri the request URI
          * @return this builder
@@ -282,7 +332,25 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         /**
-         * Adds a header.
+         * Sets the headers of the response.
+         * 
+         * @param headers the headers
+         * @return this builder
+         */
+        public Builder<T> headers(Map<String, List<String>> headers) {
+            if (headers != null) {
+                this.headers = new HashMap<>();
+                for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+                    if (entry.getKey() != null) {
+                        this.headers.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+                    }
+                }
+            }
+            return this;
+        }
+        
+        /**
+         * Adds a header to the response.
          * 
          * @param name the header name
          * @param value the header value
@@ -290,30 +358,16 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
          */
         public Builder<T> header(String name, String value) {
             if (name != null) {
-                headers.computeIfAbsent(name, k -> new ArrayList<>()).add(value != null ? value : "");
+                List<String> values = headers.computeIfAbsent(name, k -> new ArrayList<>());
+                if (value != null) {
+                    values.add(value);
+                }
             }
             return this;
         }
         
         /**
-         * Adds headers.
-         * 
-         * @param headers the headers
-         * @return this builder
-         */
-        public Builder<T> headers(Map<String, List<String>> headers) {
-            if (headers != null) {
-                headers.forEach((name, values) -> {
-                    if (values != null) {
-                        values.forEach(value -> header(name, value));
-                    }
-                });
-            }
-            return this;
-        }
-        
-        /**
-         * Sets the response body.
+         * Sets the body of the response as bytes.
          * 
          * @param body the body
          * @return this builder
@@ -324,44 +378,18 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         /**
-         * Sets the response body as a string.
+         * Sets the deserialized body of the response.
          * 
-         * @param body the body
-         * @param charset the charset to use for encoding
+         * @param deserializedBody the deserialized body
          * @return this builder
          */
-        public Builder<T> body(String body, java.nio.charset.Charset charset) {
-            if (body != null) {
-                this.body = body.getBytes(charset != null ? charset : java.nio.charset.StandardCharsets.UTF_8);
-            } else {
-                this.body = null;
-            }
+        public Builder<T> deserializedBody(T deserializedBody) {
+            this.deserializedBody = deserializedBody;
             return this;
         }
         
         /**
-         * Sets the response body as a string using UTF-8 encoding.
-         * 
-         * @param body the body
-         * @return this builder
-         */
-        public Builder<T> body(String body) {
-            return body(body, java.nio.charset.StandardCharsets.UTF_8);
-        }
-        
-        /**
-         * Sets the deserialized body.
-         * 
-         * @param body the deserialized body
-         * @return this builder
-         */
-        public Builder<T> deserializedBody(T body) {
-            this.deserializedBody = body;
-            return this;
-        }
-        
-        /**
-         * Sets the request that produced this response.
+         * Sets the request that produced the response.
          * 
          * @param request the request
          * @return this builder
@@ -372,7 +400,7 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         /**
-         * Sets the response time.
+         * Sets the response time of the response.
          * 
          * @param responseTime the response time
          * @return this builder
@@ -385,7 +413,7 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         /**
-         * Sets the time to first byte.
+         * Sets the time to first byte of the response.
          * 
          * @param timeToFirstByte the time to first byte
          * @return this builder
@@ -398,7 +426,7 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         }
         
         /**
-         * Sets the serializer.
+         * Sets the serializer to use for deserializing the response body.
          * 
          * @param serializer the serializer
          * @return this builder
@@ -411,9 +439,9 @@ public class DefaultHttpResponse<T> implements HttpResponse<T> {
         /**
          * Builds the HTTP response.
          * 
-         * @return the built response
+         * @return the built HTTP response
          */
-        public DefaultHttpResponse<T> build() {
+        public HttpResponse<T> build() {
             return new DefaultHttpResponse<>(this);
         }
     }
