@@ -1,908 +1,323 @@
 package com.network.impl.http;
 
-import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-import com.network.api.http.HttpAsyncRequestBuilder;
+import com.network.api.http.HttpClient;
+import com.network.api.http.HttpMethod;
 import com.network.api.http.HttpRequest;
-import com.network.api.http.HttpRequest.HttpMethod;
 import com.network.api.http.HttpRequestBuilder;
-import com.network.api.http.HttpRequestContext;
 import com.network.api.http.HttpResponse;
 import com.network.api.http.TypedHttpRequestBuilder;
 import com.network.exception.NetworkException;
-import com.network.serialization.SerializationException;
 import com.network.serialization.Serializer;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * Default implementation of {@link HttpRequestBuilder}.
- * 
- * <p>This class provides a concrete implementation of the HTTP request builder
- * interface for constructing HTTP requests.
+ * Default implementation of the {@link HttpRequestBuilder} interface.
  */
 public class DefaultHttpRequestBuilder implements HttpRequestBuilder {
-    
-    private final DefaultHttpClient client;
-    HttpMethod method = HttpMethod.GET;
-    private URL baseUrl;
-    private URI uri;
+
+    private final HttpClient client;
     private String path;
-    final Map<String, List<String>> headers = new HashMap<>();
-    final Map<String, List<String>> queryParams = new HashMap<>();
-    final Map<String, String> pathParams = new HashMap<>();
-    byte[] body;
-    boolean followRedirects;
-    Integer timeout;
-    final HttpRequestContext context = new HttpRequestContext();
-    Serializer serializer;
+    private final Map<String, String> queryParams = new HashMap<>();
+    private final Map<String, String> pathParams = new HashMap<>();
+    private final Map<String, String> headers = new HashMap<>();
+    private byte[] body;
+    private HttpMethod method;
+    private Duration timeout;
     
     /**
-     * Creates a new HTTP request builder.
+     * Creates a new DefaultHttpRequestBuilder.
      * 
-     * @param client the HTTP client that will execute the request
+     * @param client the HTTP client
      */
-    DefaultHttpRequestBuilder(DefaultHttpClient client) {
+    DefaultHttpRequestBuilder(HttpClient client) {
         this.client = client;
-        this.baseUrl = client.getBaseUrl();
-        this.followRedirects = client.getConfig().isFollowRedirects();
         
-        // Add default headers
-        client.getDefaultHeaders().forEach(this::header);
-        
-        // Set default content type and accept headers if not already set
-        client.getConfig().getDefaultContentType().ifPresent(ct -> 
-            headers.computeIfAbsent("Content-Type", k -> new ArrayList<>()).add(ct));
-        
-        client.getConfig().getDefaultAccept().ifPresent(a -> 
-            headers.computeIfAbsent("Accept", k -> new ArrayList<>()).add(a));
-        
-        // Set default serializer
-        this.serializer = client.getConfig().getSerializer().orElse(null);
+        // Copy default headers from client
+        headers.putAll(client.getDefaultHeaders());
     }
-    
-    @Override
-    public HttpRequestBuilder method(HttpMethod method) {
-        if (method == null) {
-            throw new IllegalArgumentException("Method must not be null");
-        }
-        this.method = method;
-        return this;
-    }
-    
-    @Override
-    public HttpRequestBuilder url(URL url) {
-        if (url == null) {
-            throw new IllegalArgumentException("URL must not be null");
-        }
-        try {
-            this.uri = url.toURI();
-            this.baseUrl = null;
-            this.path = null;
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Invalid URL: " + url, e);
-        }
-        return this;
-    }
-    
-    @Override
-    public HttpRequestBuilder uri(URI uri) {
-        if (uri == null) {
-            throw new IllegalArgumentException("URI must not be null");
-        }
-        this.uri = uri;
-        this.baseUrl = null;
-        this.path = null;
-        return this;
-    }
-    
-    @Override
-    public HttpRequestBuilder url(String url) {
-        if (url == null) {
-            throw new IllegalArgumentException("URL must not be null");
-        }
-        try {
-            return url(new URL(url));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid URL: " + url, e);
-        }
-    }
-    
+
     @Override
     public HttpRequestBuilder path(String path) {
-        if (path == null) {
-            throw new IllegalArgumentException("Path must not be null");
-        }
-        if (baseUrl == null) {
-            throw new IllegalArgumentException("Base URL must be set before path");
-        }
         this.path = path;
-        this.uri = null;
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder queryParam(String name, String value) {
-        if (name == null) {
-            throw new IllegalArgumentException("Parameter name must not be null");
-        }
-        queryParams.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
+        queryParams.put(name, value);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder queryParams(Map<String, String> params) {
-        if (params == null) {
-            throw new IllegalArgumentException("Parameters must not be null");
-        }
-        params.forEach(this::queryParam);
+        queryParams.putAll(params);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder pathParam(String name, String value) {
-        if (name == null) {
-            throw new IllegalArgumentException("Parameter name must not be null");
-        }
         pathParams.put(name, value);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder pathParams(Map<String, String> params) {
-        if (params == null) {
-            throw new IllegalArgumentException("Parameters must not be null");
-        }
         pathParams.putAll(params);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder header(String name, String value) {
-        if (name == null) {
-            throw new IllegalArgumentException("Header name must not be null");
-        }
-        if (value == null) {
-            headers.remove(name);
-        } else {
-            headers.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
-        }
+        headers.put(name, value);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder headers(Map<String, String> headers) {
-        if (headers == null) {
-            throw new IllegalArgumentException("Headers must not be null");
-        }
-        headers.forEach(this::header);
+        this.headers.putAll(headers);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder contentType(String contentType) {
-        if (contentType == null) {
-            throw new IllegalArgumentException("Content type must not be null");
-        }
-        headers.remove("Content-Type");
-        headers.computeIfAbsent("Content-Type", k -> new ArrayList<>()).add(contentType);
+        headers.put("Content-Type", contentType);
         return this;
     }
-    
+
     @Override
     public HttpRequestBuilder accept(String accept) {
-        if (accept == null) {
-            throw new IllegalArgumentException("Accept must not be null");
-        }
-        headers.remove("Accept");
-        headers.computeIfAbsent("Accept", k -> new ArrayList<>()).add(accept);
+        headers.put("Accept", accept);
         return this;
     }
-    
-    @Override
-    public HttpRequestBuilder body(String body) {
-        this.body = body != null ? body.getBytes(StandardCharsets.UTF_8) : null;
-        return this;
-    }
-    
+
     @Override
     public HttpRequestBuilder body(byte[] body) {
         this.body = body;
         return this;
     }
-    
+
     @Override
-    public HttpRequestBuilder body(Object body) {
+    public HttpRequestBuilder body(String body) {
+        this.body = body.getBytes();
+        return this;
+    }
+
+    @Override
+    public <T> HttpRequestBuilder body(T body, Class<T> bodyClass) {
         if (body == null) {
             this.body = null;
             return this;
         }
         
+        // Use the client's serializer if available
+        Serializer serializer = getSerializer();
         if (serializer == null) {
-            throw new IllegalStateException("No serializer available for body serialization");
+            throw new IllegalStateException("No serializer configured");
         }
         
-        try {
-            this.body = serializer.serialize(body);
-            
-            // Add content type if not set
-            if (!headers.containsKey("Content-Type")) {
-                headers.computeIfAbsent("Content-Type", k -> new ArrayList<>())
-                    .add(serializer.getContentType());
-            }
-            
-            return this;
-        } catch (SerializationException e) {
-            throw new IllegalArgumentException("Failed to serialize body", e);
-        }
-    }
-    
-    @Override
-    public HttpRequestBuilder formParams(Map<String, String> params) {
-        if (params == null) {
-            throw new IllegalArgumentException("Form parameters must not be null");
+        this.body = serializer.serialize(body);
+        
+        // Set appropriate content type if not already set
+        if (!headers.containsKey("Content-Type")) {
+            headers.put("Content-Type", serializer.getContentType());
         }
         
-        // Set content type to form-urlencoded
-        contentType("application/x-www-form-urlencoded");
-        
-        // Build form data
-        StringBuilder formData = new StringBuilder();
-        try {
-            for (Map.Entry<String, String> entry : params.entrySet()) {
-                if (formData.length() > 0) {
-                    formData.append('&');
-                }
-                formData.append(URLEncoder.encode(entry.getKey(), "UTF-8"))
-                    .append('=')
-                    .append(URLEncoder.encode(entry.getValue() != null ? entry.getValue() : "", "UTF-8"));
-            }
-        } catch (UnsupportedEncodingException e) {
-            // Should never happen with UTF-8
-            throw new IllegalStateException("UTF-8 encoding not supported", e);
-        }
-        
-        return body(formData.toString());
-    }
-    
-    @Override
-    public HttpRequestBuilder serializer(Serializer serializer) {
-        if (serializer == null) {
-            throw new IllegalArgumentException("Serializer must not be null");
-        }
-        this.serializer = serializer;
         return this;
     }
-    
+
     @Override
-    public HttpRequestBuilder followRedirects(boolean followRedirects) {
-        this.followRedirects = followRedirects;
+    public HttpRequestBuilder timeout(Duration timeout) {
+        this.timeout = timeout;
         return this;
     }
-    
+
     @Override
-    public HttpRequestBuilder timeout(int timeoutMillis) {
-        if (timeoutMillis < 0) {
-            throw new IllegalArgumentException("Timeout must not be negative");
-        }
-        this.timeout = timeoutMillis;
+    public HttpRequestBuilder get() {
+        this.method = HttpMethod.GET;
         return this;
     }
-    
+
     @Override
-    public HttpRequestBuilder attribute(String key, Object value) {
-        if (key == null) {
-            throw new IllegalArgumentException("Attribute key must not be null");
-        }
-        context.setAttribute(key, value);
+    public HttpRequestBuilder post() {
+        this.method = HttpMethod.POST;
         return this;
     }
-    
+
     @Override
-    public <T> TypedHttpRequestBuilder<T> deserializeAs(Class<T> type) {
-        if (type == null) {
-            throw new IllegalArgumentException("Type must not be null");
-        }
-        return new DefaultTypedHttpRequestBuilder<>(this, type);
+    public HttpRequestBuilder put() {
+        this.method = HttpMethod.PUT;
+        return this;
     }
-    
+
+    @Override
+    public HttpRequestBuilder delete() {
+        this.method = HttpMethod.DELETE;
+        return this;
+    }
+
+    @Override
+    public HttpRequestBuilder patch() {
+        this.method = HttpMethod.PATCH;
+        return this;
+    }
+
+    @Override
+    public HttpRequestBuilder head() {
+        this.method = HttpMethod.HEAD;
+        return this;
+    }
+
+    @Override
+    public HttpRequestBuilder options() {
+        this.method = HttpMethod.OPTIONS;
+        return this;
+    }
+
+    @Override
+    public <T> TypedHttpRequestBuilder<T> deserializeAs(Class<T> responseType) {
+        return new DefaultTypedHttpRequestBuilder<>(this, responseType);
+    }
+
     @Override
     public HttpResponse execute() throws NetworkException {
         return client.send(build());
     }
-    
-    @Override
-    public HttpRequest build() {
-        return new DefaultHttpRequest(this);
+
+    /**
+     * Builds an HTTP request from the current state of this builder.
+     * 
+     * @return a new HTTP request
+     */
+    HttpRequest build() {
+        if (method == null) {
+            throw new IllegalStateException("HTTP method not set");
+        }
+        
+        String resolvedPath = resolvePath();
+        URI uri = buildUri(resolvedPath);
+        
+        return new DefaultHttpRequest(uri, method, headers, body, timeout);
     }
     
     /**
-     * Builds the URI for this request.
+     * Gets the HTTP client associated with this builder.
      * 
-     * @return the built URI
-     * @throws IllegalStateException if the URI cannot be built
+     * @return the HTTP client
      */
-    URI buildUri() {
-        if (uri != null) {
-            return applyQueryParams(uri);
+    HttpClient getClient() {
+        return client;
+    }
+    
+    /**
+     * Gets the serializer from the client.
+     * 
+     * @return the serializer, or null if not available
+     */
+    private Serializer getSerializer() {
+        if (client instanceof DefaultHttpClient) {
+            return ((DefaultHttpClient) client).getSerializer();
         }
-        
-        if (baseUrl == null) {
-            throw new IllegalStateException("URL or base URL must be set");
-        }
-        
+        return null;
+    }
+    
+    /**
+     * Resolves path parameters in the path.
+     * 
+     * @return the resolved path
+     */
+    private String resolvePath() {
         if (path == null) {
-            try {
-                return applyQueryParams(baseUrl.toURI());
-            } catch (URISyntaxException e) {
-                throw new IllegalStateException("Invalid base URL: " + baseUrl, e);
-            }
+            return "";
         }
         
-        // Apply path parameters
         String resolvedPath = path;
         for (Map.Entry<String, String> entry : pathParams.entrySet()) {
-            String placeholder = "{" + entry.getKey() + "}";
-            resolvedPath = resolvedPath.replace(placeholder, 
-                entry.getValue() != null ? entry.getValue() : "");
+            resolvedPath = resolvedPath.replace("{" + entry.getKey() + "}", entry.getValue());
         }
         
-        // Resolve path against base URL
-        try {
-            URI baseUri = baseUrl.toURI();
-            
-            // Ensure path starts with a slash
-            if (!resolvedPath.startsWith("/") && !baseUri.getPath().endsWith("/")) {
-                resolvedPath = "/" + resolvedPath;
-            }
-            
-            // Build resolved URI
-            URI resolvedUri = new URI(
-                baseUri.getScheme(),
-                baseUri.getUserInfo(),
-                baseUri.getHost(),
-                baseUri.getPort(),
-                baseUri.getPath() + resolvedPath,
-                null,
-                null
-            );
-            
-            return applyQueryParams(resolvedUri);
-        } catch (URISyntaxException e) {
-            throw new IllegalStateException("Failed to build URI", e);
-        }
+        return resolvedPath;
     }
     
     /**
-     * Applies query parameters to a URI.
+     * Builds a URI from the resolved path and query parameters.
      * 
-     * @param uri the URI to apply parameters to
-     * @return the URI with applied parameters
+     * @param resolvedPath the resolved path
+     * @return the URI
      */
-    private URI applyQueryParams(URI uri) {
-        if (queryParams.isEmpty()) {
-            return uri;
-        }
-        
+    private URI buildUri(String resolvedPath) {
         try {
-            StringBuilder query = new StringBuilder();
-            if (uri.getQuery() != null && !uri.getQuery().isEmpty()) {
-                query.append(uri.getQuery());
-            }
-            
-            for (Map.Entry<String, List<String>> entry : queryParams.entrySet()) {
-                for (String value : entry.getValue()) {
-                    if (query.length() > 0) {
-                        query.append('&');
-                    }
-                    query.append(URLEncoder.encode(entry.getKey(), "UTF-8"))
-                        .append('=')
-                        .append(URLEncoder.encode(value != null ? value : "", "UTF-8"));
+            // If the path is absolute, use it directly
+            if (resolvedPath.startsWith("http://") || resolvedPath.startsWith("https://")) {
+                URI uri = new URI(resolvedPath);
+                
+                // Append query parameters if any
+                if (!queryParams.isEmpty()) {
+                    String query = buildQueryString();
+                    return new URI(uri.getScheme(), uri.getUserInfo(), uri.getHost(), uri.getPort(),
+                            uri.getPath(), query, uri.getFragment());
                 }
+                
+                return uri;
             }
             
-            return new URI(
-                uri.getScheme(),
-                uri.getUserInfo(),
-                uri.getHost(),
-                uri.getPort(),
-                uri.getPath(),
-                query.toString(),
-                uri.getFragment()
-            );
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to apply query parameters", e);
-        }
-    }
-    
-    /**
-     * Default implementation of {@link TypedHttpRequestBuilder}.
-     * 
-     * @param <T> the type to deserialize responses to
-     */
-    private class DefaultTypedHttpRequestBuilder<T> implements TypedHttpRequestBuilder<T> {
-        
-        private final DefaultHttpRequestBuilder builder;
-        private final Class<T> type;
-        
-        /**
-         * Creates a new typed HTTP request builder.
-         * 
-         * @param builder the parent builder
-         * @param type the type to deserialize responses to
-         */
-        DefaultTypedHttpRequestBuilder(DefaultHttpRequestBuilder builder, Class<T> type) {
-            this.builder = builder;
-            this.type = type;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> method(HttpMethod method) {
-            builder.method(method);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> url(URL url) {
-            builder.url(url);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> uri(URI uri) {
-            builder.uri(uri);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> url(String url) {
-            builder.url(url);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> path(String path) {
-            builder.path(path);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> queryParam(String name, String value) {
-            builder.queryParam(name, value);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> queryParams(Map<String, String> params) {
-            builder.queryParams(params);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> pathParam(String name, String value) {
-            builder.pathParam(name, value);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> pathParams(Map<String, String> params) {
-            builder.pathParams(params);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> header(String name, String value) {
-            builder.header(name, value);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> headers(Map<String, String> headers) {
-            builder.headers(headers);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> contentType(String contentType) {
-            builder.contentType(contentType);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> accept(String accept) {
-            builder.accept(accept);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> body(String body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> body(byte[] body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> body(Object body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> formParams(Map<String, String> params) {
-            builder.formParams(params);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> serializer(Serializer serializer) {
-            builder.serializer(serializer);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> followRedirects(boolean followRedirects) {
-            builder.followRedirects(followRedirects);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> timeout(int timeoutMillis) {
-            builder.timeout(timeoutMillis);
-            return this;
-        }
-        
-        @Override
-        public TypedHttpRequestBuilder<T> attribute(String key, Object value) {
-            builder.attribute(key, value);
-            return this;
-        }
-        
-        @Override
-        public HttpResponse<T> execute() throws NetworkException {
-            HttpRequest request = builder.build();
-            HttpResponse response = client.send(request);
-            return new DefaultHttpResponse<>(response, type, builder.serializer);
-        }
-        
-        @Override
-        public HttpRequest build() {
-            return builder.build();
-        }
-    }
-    
-    /**
-     * Default implementation of {@link HttpAsyncRequestBuilder}.
-     */
-    public class DefaultHttpAsyncRequestBuilder implements HttpAsyncRequestBuilder {
-        
-        private final DefaultHttpRequestBuilder builder;
-        
-        /**
-         * Creates a new asynchronous HTTP request builder.
-         * 
-         * @param builder the synchronous builder to delegate to
-         */
-        DefaultHttpAsyncRequestBuilder(DefaultHttpRequestBuilder builder) {
-            this.builder = builder;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder method(HttpMethod method) {
-            builder.method(method);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder url(URL url) {
-            builder.url(url);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder uri(URI uri) {
-            builder.uri(uri);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder url(String url) {
-            builder.url(url);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder path(String path) {
-            builder.path(path);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder queryParam(String name, String value) {
-            builder.queryParam(name, value);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder queryParams(Map<String, String> params) {
-            builder.queryParams(params);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder pathParam(String name, String value) {
-            builder.pathParam(name, value);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder pathParams(Map<String, String> params) {
-            builder.pathParams(params);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder header(String name, String value) {
-            builder.header(name, value);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder headers(Map<String, String> headers) {
-            builder.headers(headers);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder contentType(String contentType) {
-            builder.contentType(contentType);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder accept(String accept) {
-            builder.accept(accept);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder body(String body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder body(byte[] body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder body(Object body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder formParams(Map<String, String> params) {
-            builder.formParams(params);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder serializer(Serializer serializer) {
-            builder.serializer(serializer);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder followRedirects(boolean followRedirects) {
-            builder.followRedirects(followRedirects);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder timeout(int timeoutMillis) {
-            builder.timeout(timeoutMillis);
-            return this;
-        }
-        
-        @Override
-        public HttpAsyncRequestBuilder attribute(String key, Object value) {
-            builder.attribute(key, value);
-            return this;
-        }
-        
-        @Override
-        public <V> DefaultTypedHttpAsyncRequestBuilder<V> deserializeAs(Class<V> type) {
-            if (type == null) {
-                throw new IllegalArgumentException("Type must not be null");
+            // If the client has a base URL, resolve the path against it
+            if (client.getBaseUrl() != null) {
+                URI baseUri = client.getBaseUrl().toURI();
+                
+                // Ensure the path starts with a slash
+                if (!resolvedPath.isEmpty() && !resolvedPath.startsWith("/")) {
+                    resolvedPath = "/" + resolvedPath;
+                }
+                
+                // Resolve the path against the base URL
+                URI resolvedUri = baseUri.resolve(resolvedPath);
+                
+                // Append query parameters if any
+                if (!queryParams.isEmpty()) {
+                    String query = buildQueryString();
+                    return new URI(resolvedUri.getScheme(), resolvedUri.getUserInfo(), resolvedUri.getHost(),
+                            resolvedUri.getPort(), resolvedUri.getPath(), query, resolvedUri.getFragment());
+                }
+                
+                return resolvedUri;
             }
-            return new DefaultTypedHttpAsyncRequestBuilder<>(this, type);
-        }
-        
-        @Override
-        public CompletableFuture<HttpResponse> execute() {
-            HttpRequest request = builder.build();
-            return client.sendAsync(request);
-        }
-        
-        @Override
-        public HttpRequest build() {
-            return builder.build();
+            
+            // If there's no base URL, treat the path as absolute
+            String query = buildQueryString();
+            return new URI(resolvedPath + (query.isEmpty() ? "" : "?" + query));
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid URI: " + resolvedPath, e);
         }
     }
     
     /**
-     * Default implementation of {@link TypedHttpAsyncRequestBuilder}.
+     * Builds a query string from the query parameters.
      * 
-     * @param <T> the type to deserialize responses to
+     * @return the query string
      */
-    private class DefaultTypedHttpAsyncRequestBuilder<T> implements com.network.api.http.TypedHttpAsyncRequestBuilder<T> {
-        
-        private final DefaultHttpAsyncRequestBuilder builder;
-        private final Class<T> type;
-        
-        /**
-         * Creates a new typed asynchronous HTTP request builder.
-         * 
-         * @param builder the parent builder
-         * @param type the type to deserialize responses to
-         */
-        DefaultTypedHttpAsyncRequestBuilder(DefaultHttpAsyncRequestBuilder builder, Class<T> type) {
-            this.builder = builder;
-            this.type = type;
+    private String buildQueryString() {
+        if (queryParams.isEmpty()) {
+            return "";
         }
         
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> method(HttpMethod method) {
-            builder.method(method);
-            return this;
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        
+        for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+            if (first) {
+                first = false;
+            } else {
+                sb.append("&");
+            }
+            
+            sb.append(entry.getKey()).append("=").append(entry.getValue());
         }
         
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> url(URL url) {
-            builder.url(url);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> uri(URI uri) {
-            builder.uri(uri);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> url(String url) {
-            builder.url(url);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> path(String path) {
-            builder.path(path);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> queryParam(String name, String value) {
-            builder.queryParam(name, value);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> queryParams(Map<String, String> params) {
-            builder.queryParams(params);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> pathParam(String name, String value) {
-            builder.pathParam(name, value);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> pathParams(Map<String, String> params) {
-            builder.pathParams(params);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> header(String name, String value) {
-            builder.header(name, value);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> headers(Map<String, String> headers) {
-            builder.headers(headers);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> contentType(String contentType) {
-            builder.contentType(contentType);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> accept(String accept) {
-            builder.accept(accept);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> body(String body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> body(byte[] body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> body(Object body) {
-            builder.body(body);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> formParams(Map<String, String> params) {
-            builder.formParams(params);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> serializer(Serializer serializer) {
-            builder.serializer(serializer);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> followRedirects(boolean followRedirects) {
-            builder.followRedirects(followRedirects);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> timeout(int timeoutMillis) {
-            builder.timeout(timeoutMillis);
-            return this;
-        }
-        
-        @Override
-        public com.network.api.http.TypedHttpAsyncRequestBuilder<T> attribute(String key, Object value) {
-            builder.attribute(key, value);
-            return this;
-        }
-        
-        @Override
-        public CompletableFuture<HttpResponse<T>> execute() {
-            HttpRequest request = builder.build();
-            return client.sendAsync(request)
-                .thenApply(response -> new DefaultHttpResponse<>(response, type, DefaultHttpRequestBuilder.this.serializer));
-        }
-        
-        @Override
-        public HttpRequest build() {
-            return builder.build();
-        }
+        return sb.toString();
     }
 }
