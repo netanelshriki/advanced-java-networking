@@ -43,14 +43,13 @@ This library implements modern design patterns and best practices to offer a com
 | WebSocket Client | ✅ Complete | Basic implementation available |
 | Unit Tests | 🔴 Not Started | To be implemented |
 
-## Architecture
+## Documentation
 
-The library is designed with a layered architecture:
+Comprehensive documentation is available in the [docs](docs/) directory:
 
-1. **Core API Layer**: Interfaces defining the networking contracts
-2. **Protocol Implementations**: Concrete implementations for each protocol
-3. **Middleware Layer**: Pluggable components for cross-cutting concerns
-4. **Utility Layer**: Support classes and helpers
+- [Documentation Index](docs/README.md)
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Class Hierarchy](docs/CLASS_HIERARCHY.md)
 
 ### Architecture Diagram
 
